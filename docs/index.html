@@ -695,7 +695,7 @@ function buildNTUST() {
     const p=new THREE.Mesh(new THREE.PlaneGeometry(w,d),matPath);
     p.rotation.x=-Math.PI/2; p.position.set(x,0.01,z); p.receiveShadow=true; g.add(p);
   });
-  [{x:-6,z:16,w:16,d:8},{x:4,z:-8,w:6,d:10}].forEach(p=>{
+  [{x:-6,z:16,w:16,d:8},{x:4,z:2,w:6,d:8}].forEach(p=>{
     const gr=new THREE.Mesh(new THREE.PlaneGeometry(p.w,p.d),matGrass);
     gr.rotation.x=-Math.PI/2; gr.position.set(p.x,0.02,p.z); gr.receiveShadow=true; g.add(gr);
   });
@@ -712,36 +712,36 @@ function buildNTUST() {
   const trLbl=textLabel('TR 研揚大樓',3.8,0.85);
   trLbl.position.set(22,34,-16); g.add(trLbl);
 
-  // ── 跑道/運動場 (TR東北 與 T1西南 的對角中央) ─────────────
-  // center (6,-4)，東西走向，半圓 r=4 在 x=0 與 x=12
+  // ── 跑道/運動場 (中北，與 TR 同緯度，TR 西側) ─────────────
+  // TR=(22,-15)，跑道在 TR 偏西同緯 → center (5,-10)
   const trackRect=new THREE.Mesh(new THREE.PlaneGeometry(12,8),matTrack);
-  trackRect.rotation.x=-Math.PI/2; trackRect.position.set(6,0.03,-4); trackRect.receiveShadow=true; g.add(trackRect);
-  [[0,-4],[12,-4]].forEach(([x,z])=>{
+  trackRect.rotation.x=-Math.PI/2; trackRect.position.set(5,0.03,-10); trackRect.receiveShadow=true; g.add(trackRect);
+  [[-1,-10],[11,-10]].forEach(([x,z])=>{
     const e=new THREE.Mesh(new THREE.CircleGeometry(4,32),matTrack);
     e.rotation.x=-Math.PI/2; e.position.set(x,0.03,z); e.receiveShadow=true; g.add(e);
   });
   const inner1=new THREE.Mesh(new THREE.PlaneGeometry(6,4),matInner);
-  inner1.rotation.x=-Math.PI/2; inner1.position.set(6,0.04,-4); inner1.receiveShadow=true; g.add(inner1);
-  [[0,-4],[12,-4]].forEach(([x,z])=>{
+  inner1.rotation.x=-Math.PI/2; inner1.position.set(5,0.04,-10); inner1.receiveShadow=true; g.add(inner1);
+  [[-1,-10],[11,-10]].forEach(([x,z])=>{
     const e=new THREE.Mesh(new THREE.CircleGeometry(2,32),matInner);
     e.rotation.x=-Math.PI/2; e.position.set(x,0.04,z); e.receiveShadow=true; g.add(e);
   });
 
-  // ── 網球場 (跑道東南側) ───────────────────────────────────
-  // center (16,4), w=12, d=8
+  // ── 網球場 (跑道東側) ─────────────────────────────────────
+  // center (12,-4), w=12, d=8
   const tennis=new THREE.Mesh(new THREE.PlaneGeometry(12,8),tennisMat);
-  tennis.rotation.x=-Math.PI/2; tennis.position.set(16,0.03,4); tennis.receiveShadow=true; g.add(tennis);
-  [10,22].forEach(x=>{
+  tennis.rotation.x=-Math.PI/2; tennis.position.set(12,0.03,-4); tennis.receiveShadow=true; g.add(tennis);
+  [6,18].forEach(x=>{
     const line=new THREE.Mesh(new THREE.PlaneGeometry(0.2,8),new THREE.MeshLambertMaterial({color:0xFFFFFF}));
-    line.rotation.x=-Math.PI/2; line.position.set(x,0.04,4); g.add(line);
+    line.rotation.x=-Math.PI/2; line.position.set(x,0.04,-4); g.add(line);
   });
 
   // ── 籃球場 (球場南側) ─────────────────────────────────────
-  // center (14,12), w=12, d=8
+  // center (12,6), w=12, d=8
   const bball=new THREE.Mesh(new THREE.PlaneGeometry(12,8),bballMat);
-  bball.rotation.x=-Math.PI/2; bball.position.set(14,0.03,12); bball.receiveShadow=true; g.add(bball);
+  bball.rotation.x=-Math.PI/2; bball.position.set(12,0.03,6); bball.receiveShadow=true; g.add(bball);
   const midLine=new THREE.Mesh(new THREE.PlaneGeometry(12,0.2),new THREE.MeshLambertMaterial({color:0xFFFFFF}));
-  midLine.rotation.x=-Math.PI/2; midLine.position.set(14,0.04,12); g.add(midLine);
+  midLine.rotation.x=-Math.PI/2; midLine.position.set(12,0.04,6); g.add(midLine);
 
   // ── AU 視聽館 (中央偏西) ──────────────────────────────────
   // center (-6,4), w=6, d=5, h=8
