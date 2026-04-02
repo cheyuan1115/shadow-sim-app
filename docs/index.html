@@ -659,15 +659,15 @@ function buildTaipei101() {
 // 座向依衛星圖：研揚(TR)=東北、運動場=中東、圖書館=西、建築系RB=西南
 // Three.js: +X=東, -Z=北, +Z=南
 // 建築間距確認（各建築中心±半寬深不重疊）：
-//   TR(22,-16) w6d18  → x:19-25 z:-25--7
-//   T1(-2,-16) w8d10  → x:-6-2  z:-21--11
-//   AU(-10,-5) w6d5   → x:-13--7 z:-7.5--2.5
-//   Track(9,-6) rect12x8 r3 → x:0-18 z:-9--3  ← 在 T1 東側(x2)與 TR 西側(x19)之間
-//   Tennis(14,4) w12d8 → x:8-20 z:0-8         ← 跑道南側、TR/T1 之間
-//   Bball(12,14) w12d8 → x:6-18 z:10-18
+//   TR(22,-15) w6d18  → x:19-25 z:-24--6
+//   Track(6,-4) rect12x8 r4 → x:-4-16 z:-8-0  ← TR(NE)與T1(SW)對角中間
+//   Tennis(16,4) w12d8 → x:10-22 z:0-8
+//   Bball(14,12) w12d8 → x:8-20 z:8-16
+//   AU(-6,4) w6d5      → x:-9--3 z:1.5-6.5
+//   T1(-2,12) w8d8h16  → x:-6-2  z:8-16       ← 工程一館 移至西南
 //   Library(-22,2) w8d10 → x:-26--18 z:-3-7
-//   RB(-12,12) w12d10   → x:-18--6 z:7-17
-//   T4(0,22) w12d7      → x:-6-6  z:18.5-25.5
+//   RB(-12,12) w12d10   → x:-18--6 z:7-17      ← 建築系 西南
+//   T4(4,22) w12d7      → x:-2-10 z:18.5-25.5
 function buildNTUST() {
   const g = groupNTUST;
   const matGnd   = new THREE.MeshLambertMaterial({color:0xC8C0A0});
@@ -712,50 +712,50 @@ function buildNTUST() {
   const trLbl=textLabel('TR 研揚大樓',3.8,0.85);
   trLbl.position.set(22,34,-16); g.add(trLbl);
 
-  // ── 跑道/運動場 (研揚與T1之間) ───────────────────────────
-  // center (9,-6)，T1 東側(x2)與 TR 西側(x19)之間
+  // ── 跑道/運動場 (TR東北 與 T1西南 的對角中央) ─────────────
+  // center (6,-4)，東西走向，半圓 r=4 在 x=0 與 x=12
   const trackRect=new THREE.Mesh(new THREE.PlaneGeometry(12,8),matTrack);
-  trackRect.rotation.x=-Math.PI/2; trackRect.position.set(9,0.03,-6); trackRect.receiveShadow=true; g.add(trackRect);
-  [[3,-6],[15,-6]].forEach(([x,z])=>{
+  trackRect.rotation.x=-Math.PI/2; trackRect.position.set(6,0.03,-4); trackRect.receiveShadow=true; g.add(trackRect);
+  [[0,-4],[12,-4]].forEach(([x,z])=>{
     const e=new THREE.Mesh(new THREE.CircleGeometry(4,32),matTrack);
     e.rotation.x=-Math.PI/2; e.position.set(x,0.03,z); e.receiveShadow=true; g.add(e);
   });
   const inner1=new THREE.Mesh(new THREE.PlaneGeometry(6,4),matInner);
-  inner1.rotation.x=-Math.PI/2; inner1.position.set(9,0.04,-6); inner1.receiveShadow=true; g.add(inner1);
-  [[3,-6],[15,-6]].forEach(([x,z])=>{
+  inner1.rotation.x=-Math.PI/2; inner1.position.set(6,0.04,-4); inner1.receiveShadow=true; g.add(inner1);
+  [[0,-4],[12,-4]].forEach(([x,z])=>{
     const e=new THREE.Mesh(new THREE.CircleGeometry(2,32),matInner);
     e.rotation.x=-Math.PI/2; e.position.set(x,0.04,z); e.receiveShadow=true; g.add(e);
   });
 
-  // ── 網球場 (跑道南側、TR/T1 之間) ────────────────────────
-  // center (14,4), w=12, d=8
+  // ── 網球場 (跑道東南側) ───────────────────────────────────
+  // center (16,4), w=12, d=8
   const tennis=new THREE.Mesh(new THREE.PlaneGeometry(12,8),tennisMat);
-  tennis.rotation.x=-Math.PI/2; tennis.position.set(14,0.03,4); tennis.receiveShadow=true; g.add(tennis);
-  [8,20].forEach(x=>{
+  tennis.rotation.x=-Math.PI/2; tennis.position.set(16,0.03,4); tennis.receiveShadow=true; g.add(tennis);
+  [10,22].forEach(x=>{
     const line=new THREE.Mesh(new THREE.PlaneGeometry(0.2,8),new THREE.MeshLambertMaterial({color:0xFFFFFF}));
     line.rotation.x=-Math.PI/2; line.position.set(x,0.04,4); g.add(line);
   });
 
   // ── 籃球場 (球場南側) ─────────────────────────────────────
-  // center (12,14), w=12, d=8
+  // center (14,12), w=12, d=8
   const bball=new THREE.Mesh(new THREE.PlaneGeometry(12,8),bballMat);
-  bball.rotation.x=-Math.PI/2; bball.position.set(12,0.03,14); bball.receiveShadow=true; g.add(bball);
+  bball.rotation.x=-Math.PI/2; bball.position.set(14,0.03,12); bball.receiveShadow=true; g.add(bball);
   const midLine=new THREE.Mesh(new THREE.PlaneGeometry(12,0.2),new THREE.MeshLambertMaterial({color:0xFFFFFF}));
-  midLine.rotation.x=-Math.PI/2; midLine.position.set(12,0.04,14); g.add(midLine);
+  midLine.rotation.x=-Math.PI/2; midLine.position.set(14,0.04,12); g.add(midLine);
 
-  // ── T1 教學大樓 (中北) ────────────────────────────────────
-  // center (-2,-16), w=8, d=10, h=20
-  addBox(g, -2,10,-16, 8.0,20,10.0, matT1);
-  addBox(g, -2,20.2,-16, 8.2,0.4,10.2, matRoof);
-  const t1Lbl=textLabel('T1',2.0,0.75); t1Lbl.position.set(-2,22,-16); g.add(t1Lbl);
-
-  // ── AU 視聽館 (中西) ──────────────────────────────────────
-  // center (-10,-5), w=6, d=5, h=8
-  addBox(g, -10,4,-5, 6.0,8,5.0, matT4);
-  addBox(g, -10,8.2,-5, 6.2,0.4,5.2, matRoof);
-  const auLbl=textLabel('AU 視聽館',2.8,0.7); auLbl.position.set(-10,9.5,-5); g.add(auLbl);
+  // ── AU 視聽館 (中央偏西) ──────────────────────────────────
+  // center (-6,4), w=6, d=5, h=8
+  addBox(g, -6,4,4, 6.0,8,5.0, matT4);
+  addBox(g, -6,8.2,4, 6.2,0.4,5.2, matRoof);
+  const auLbl=textLabel('AU 視聽館',2.8,0.7); auLbl.position.set(-6,9.5,4); g.add(auLbl);
   const pond=new THREE.Mesh(new THREE.CircleGeometry(1.8,24),new THREE.MeshLambertMaterial({color:0x5090B0}));
-  pond.rotation.x=-Math.PI/2; pond.position.set(-8,0.05,-2); g.add(pond);
+  pond.rotation.x=-Math.PI/2; pond.position.set(-4,0.05,0); g.add(pond);
+
+  // ── T1 工程一館 (西南) ────────────────────────────────────
+  // center (-2,12), w=8, d=8, h=16  ← 依地圖：工程一館在西南
+  addBox(g, -2,8,12, 8.0,16,8.0, matT1);
+  addBox(g, -2,16.2,12, 8.2,0.4,8.2, matRoof);
+  const t1Lbl=textLabel('T1 工程一館',3.2,0.75); t1Lbl.position.set(-2,18,12); g.add(t1Lbl);
 
   // ── RB 綜合研究大樓/建築系 (西南) ────────────────────────
   // center (-12,12), w=12, d=10, h=24
@@ -777,12 +777,12 @@ function buildNTUST() {
   for(let f=1;f<=8;f++) addWindowBand(g,-22,2,8.0,10.0,f*3.2,matWin);
   const libLbl=textLabel('圖書館 Library',4.2,0.9); libLbl.position.set(-22,30,2); g.add(libLbl);
 
-  // ── T4 (南) ───────────────────────────────────────────────
-  // center (0,22), w=12, d=7, h=16
-  addBox(g, 0,8,22, 12.0,16,7.0, matT4);
-  addBox(g, 0,16.2,22, 12.2,0.4,7.2, matRoof);
-  for(let f=1;f<=5;f++) addWindowBand(g,0,22,12.0,7.0,f*3.0,matWin);
-  const t4Lbl=textLabel('T4',2.5,0.75); t4Lbl.position.set(0,18,22); g.add(t4Lbl);
+  // ── T4 (南偏東) ───────────────────────────────────────────
+  // center (4,22), w=12, d=7, h=16
+  addBox(g, 4,8,22, 12.0,16,7.0, matT4);
+  addBox(g, 4,16.2,22, 12.2,0.4,7.2, matRoof);
+  for(let f=1;f<=5;f++) addWindowBand(g,4,22,12.0,7.0,f*3.0,matWin);
+  const t4Lbl=textLabel('T4',2.5,0.75); t4Lbl.position.set(4,18,22); g.add(t4Lbl);
 
   // ── 校門 Gate (南端) ──────────────────────────────────────
   addBox(g, 0,2.5,28, 16.0,0.5,0.8, matRoof);
