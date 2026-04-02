@@ -667,14 +667,14 @@ function buildNTUST() {
   midLine.rotation.x=-Math.PI/2; midLine.position.set(-17,0.04,-2); g.add(midLine);
 
   const trackRect=new THREE.Mesh(new THREE.PlaneGeometry(18,10),matTrack);
-  trackRect.rotation.x=-Math.PI/2; trackRect.position.set(-17,0.03,11); trackRect.receiveShadow=true; g.add(trackRect);
-  [[-26,11],[-8,11]].forEach(([x,z])=>{
+  trackRect.rotation.x=-Math.PI/2; trackRect.position.set(-17,0.03,-6); trackRect.receiveShadow=true; g.add(trackRect);
+  [[-26,-6],[-8,-6]].forEach(([x,z])=>{
     const e=new THREE.Mesh(new THREE.CircleGeometry(5,32),matTrack);
     e.rotation.x=-Math.PI/2; e.position.set(x,0.03,z); e.receiveShadow=true; g.add(e);
   });
   const inner1=new THREE.Mesh(new THREE.PlaneGeometry(18,6),matInner);
-  inner1.rotation.x=-Math.PI/2; inner1.position.set(-17,0.04,11); inner1.receiveShadow=true; g.add(inner1);
-  [[-26,11],[-8,11]].forEach(([x,z])=>{
+  inner1.rotation.x=-Math.PI/2; inner1.position.set(-17,0.04,-6); inner1.receiveShadow=true; g.add(inner1);
+  [[-26,-6],[-8,-6]].forEach(([x,z])=>{
     const e=new THREE.Mesh(new THREE.CircleGeometry(3,32),matInner);
     e.rotation.x=-Math.PI/2; e.position.set(x,0.04,z); e.receiveShadow=true; g.add(e);
   });
@@ -705,10 +705,10 @@ function buildNTUST() {
   for(let f=1;f<=8;f++) addWindowBand(g,16,2,8.0,10.0,f*3.2,matWin);
   const libLbl=textLabel('圖書館 Library',4.2,0.9); libLbl.position.set(16,30,2); g.add(libLbl);
 
-  addBox(g,5,8,-16,12.0,16,7.0,matT4);
-  addBox(g,5,16.2,-16,12.2,0.4,7.2,matRoof);
-  for(let f=1;f<=5;f++) addWindowBand(g,5,-16,12.0,7.0,f*3.0,matWin);
-  const t4Lbl=textLabel('T4',2.5,0.75); t4Lbl.position.set(5,18,-16); g.add(t4Lbl);
+  addBox(g,2,8,18,12.0,16,7.0,matT4);
+  addBox(g,2,16.2,18,12.2,0.4,7.2,matRoof);
+  for(let f=1;f<=5;f++) addWindowBand(g,2,18,12.0,7.0,f*3.0,matWin);
+  const t4Lbl=textLabel('T4',2.5,0.75); t4Lbl.position.set(2,18,18); g.add(t4Lbl);
 
   addBox(g,4,2.5,24,16.0,0.5,0.8,matRoof);
   addBox(g,-4,1.25,24,0.8,2.5,0.8,matRoof);
