@@ -447,10 +447,10 @@ export function generateSceneHTML() {
       });
 
       // TR
-      addBox(g, 40.5, 25, -50.5, 90, 50, 20, matTR);
-      addBox(g, 40.5, 50.3, -50.5, 91.5, 0.6, 21.5, matRoof);
-      [5,9,14,18,23,27,32,36,41,45].forEach(y => addWindowBand(g,40.5,-50.5,90,20,y,matWin));
-      const trLbl = textLabel('研揚大樓 TR', 8, 2); trLbl.position.set(40.5,52,-50.5); g.add(trLbl);
+      addBox(g, 40.5, 16.5, -50.5, 90, 33, 20, matTR);
+      addBox(g, 40.5, 33.3, -50.5, 91.5, 0.6, 21.5, matRoof);
+      [5,9,14,18,23,27,32].forEach(y => addWindowBand(g,40.5,-50.5,90,20,y,matWin));
+      const trLbl = textLabel('研揚大樓 TR', 8, 2); trLbl.position.set(40.5,35,-50.5); g.add(trLbl);
 
       // T1
       addBox(g, 22, 5, 47, 50, 10, 15, matT1);
