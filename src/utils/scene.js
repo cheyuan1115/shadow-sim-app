@@ -935,19 +935,19 @@ export function generateSceneHTML() {
       const isIndoor = currentPreset === 'indoor';
       const sd=sunDir(azDeg*DEG,altDeg*DEG), dist=currentPreset==='ntust'?150:80;
       const tgt = currentPreset === 'ntust' ? new THREE.Vector3(0,0,2) : new THREE.Vector3(0,0,0);
-      // 室內：檢查太陽是否能照進窗戶（方位角與窗戶法線夾角 < 90°）
-      var canEnterWindow = true;
+      // 室內：依太陽方位與窗戶法線夾角計算進光比例（cosine衰減）
+      var windowFactor = 1;
       if (isIndoor && altDeg > 0) {
         var winNormalAz = ORIENT_AZ[currentOrientation] || 180;
         var diff = Math.abs(azDeg - winNormalAz);
         if (diff > 180) diff = 360 - diff;
-        canEnterWindow = diff < 90;
+        windowFactor = diff >= 90 ? 0 : Math.cos(diff * DEG);
       }
       if (altDeg>0) {
         sunLight.position.set(sd.x*dist+tgt.x,sd.y*dist,sd.z*dist+tgt.z);
         sunLight.target.position.copy(tgt); sunLight.target.updateMatrixWorld();
         var baseIntensity = isIndoor ? 1.5+Math.sin(altDeg*DEG)*2.5 : 0.5+Math.sin(altDeg*DEG)*2.2;
-        sunLight.intensity = (isIndoor && !canEnterWindow) ? 0.15 : baseIntensity;
+        sunLight.intensity = isIndoor ? 0.15 + baseIntensity * windowFactor : baseIntensity;
         if (!isIndoor) {
           var shadowSize = Math.max(60, Math.min(300, MAIN_H_REF / Math.max(0.05, Math.tan(altDeg*DEG)) + 30));
           sunLight.shadow.camera.left = -shadowSize; sunLight.shadow.camera.right = shadowSize;
