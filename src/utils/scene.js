@@ -937,19 +937,21 @@ export function generateSceneHTML() {
       const isIndoor = currentPreset === 'indoor';
       const sd=sunDir(azDeg*DEG,altDeg*DEG), dist=currentPreset==='ntust'?150:80;
       const tgt = currentPreset === 'ntust' ? new THREE.Vector3(0,0,2) : new THREE.Vector3(0,0,0);
-      // 室內：太陽方位是否在窗戶可視範圍內（夾角<90°即可照入）
+      // 室內：太陽方位與窗戶法線夾角，用smoothstep過渡避免亮度跳變
       var windowFactor = 1;
       if (isIndoor && altDeg > 0) {
         var winNormalAz = ORIENT_AZ[currentOrientation] !== undefined ? ORIENT_AZ[currentOrientation] : 180;
         var diff = Math.abs(azDeg - winNormalAz);
         if (diff > 180) diff = 360 - diff;
-        windowFactor = diff >= 90 ? 0 : 1;
+        if (diff >= 95) windowFactor = 0;
+        else if (diff <= 80) windowFactor = 1;
+        else windowFactor = (95 - diff) / 15; // 80°~95° 平滑過渡
       }
       if (altDeg>0) {
         sunLight.position.set(sd.x*dist+tgt.x,sd.y*dist,sd.z*dist+tgt.z);
         sunLight.target.position.copy(tgt); sunLight.target.updateMatrixWorld();
         var baseIntensity = isIndoor ? 1.5+Math.sin(altDeg*DEG)*2.5 : 0.5+Math.sin(altDeg*DEG)*2.2;
-        sunLight.intensity = isIndoor ? 0.15 + baseIntensity * windowFactor : baseIntensity;
+        sunLight.intensity = isIndoor ? baseIntensity * windowFactor : baseIntensity;
         if (!isIndoor) {
           var shadowSize = Math.max(60, Math.min(300, MAIN_H_REF / Math.max(0.05, Math.tan(altDeg*DEG)) + 30));
           if (currentPreset === 'ntust') shadowSize = Math.max(shadowSize, 200);
@@ -965,7 +967,7 @@ export function generateSceneHTML() {
           sunMesh.material.color.setHex(altDeg<15 ? 0xFF7030 : 0xFFE055);
         }
       } else { sunLight.intensity=0; sunMesh.visible=false; }
-      hemi.intensity = isIndoor ? (windowFactor > 0 ? 0.30 : 0.55) : Math.max(0.05, 0.08+Math.max(0,Math.sin(altDeg*DEG))*0.65);
+      hemi.intensity = isIndoor ? 0.50 : Math.max(0.05, 0.08+Math.max(0,Math.sin(altDeg*DEG))*0.65);
       let sky;
       if      (altDeg<=-5)  sky=cNight.clone();
       else if (altDeg<=0)   sky=cNight.clone().lerp(cTwi,(altDeg+5)/5);

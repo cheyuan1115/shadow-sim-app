@@ -109,7 +109,7 @@ export default function SimulatorScreen() {
   const azDiff = Math.abs(sun.azimuth - winNormalAz) > 180
     ? 360 - Math.abs(sun.azimuth - winNormalAz)
     : Math.abs(sun.azimuth - winNormalAz);
-  const canEnterWindow = azDiff < 90;
+  const canEnterWindow = azDiff < 95;
   const lightPenetration = preset === 'indoor' && sun.isAboveHorizon && sun.altitude > 0.5 && canEnterWindow
     ? (2.7 / Math.tan(sun.altitude * Math.PI / 180)).toFixed(1)
     : null;
