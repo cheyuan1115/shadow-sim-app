@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-TW"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台科大校園配置編輯器</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: system-ui, sans-serif; background:#1a1a2e; color:#eee; display:flex; height:100vh; overflow:hidden; }
+#sidebar { width:320px; background:#16213e; padding:12px; overflow-y:auto; font-size:13px; }
+#sidebar h2 { font-size:16px; margin-bottom:8px; color:#e2b714; }
+#sidebar p { font-size:11px; color:#999; margin-bottom:10px; }
+.bld-card { background:#0f3460; border-radius:6px; padding:8px 10px; margin-bottom:6px; cursor:pointer; border:2px solid transparent; }
+.bld-card.active { border-color:#e2b714; }
+.bld-card .name { font-weight:bold; font-size:13px; }
+.bld-card .coords { font-size:11px; color:#aaa; margin-top:2px; }
+.dim-row { display:flex; gap:4px; margin-top:4px; }
+.dim-row label { font-size:10px; color:#888; }
+.dim-row input { width:48px; background:#1a1a2e; border:1px solid #333; color:#eee; padding:2px 4px; border-radius:3px; font-size:11px; }
+#canvas-wrap { flex:1; position:relative; }
+canvas { display:block; width:100%; height:100%; }
+#toolbar { position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:6px; }
+#toolbar button { background:#e2b714; color:#000; border:none; padding:8px 14px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:13px; }
+#toolbar button:hover { background:#f0c830; }
+#code-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:100; justify-content:center; align-items:center; }
+#code-modal.show { display:flex; }
+#code-modal pre { background:#111; color:#0f0; padding:16px; border-radius:8px; max-width:80vw; max-height:80vh; overflow:auto; font-size:11px; white-space:pre-wrap; }
+#code-modal .close-btn { position:absolute; top:20px; right:20px; background:#e2b714; color:#000; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:bold; }
+#help { position:absolute; bottom:10px; left:10px; font-size:11px; color:#666; }
+</style>
+</head><body>
+<div id="sidebar">
+  <h2>🏫 台科大配置編輯器</h2>
+  <p>拖拉建築物 · 右側面板調尺寸 · 點「產生程式碼」匯出</p>
+  <div id="cards"></div>
+</div>
+<div id="canvas-wrap">
+  <canvas id="cv"></canvas>
+  <div id="toolbar">
+    <button onclick="resetAll()">重置</button>
+    <button onclick="showCode()">產生程式碼</button>
+  </div>
+  <div id="help">滾輪縮放 · 右鍵平移 · 左鍵拖建築</div>
+</div>
+<div id="code-modal">
+  <button class="close-btn" onclick="hideCode()">關閉</button>
+  <pre id="code-out"></pre>
+</div>
+
+<script>
+// ── Building definitions ─────────────────────────────────────
+// lx = depth (screen up/back), lz = left-right (screen left-right)
+// w = lx-width, d = lz-width, h = height
+const DEFAULTS = [
+  { id:'road',  name:'基隆路', lx:-15, lz:15, w:10, d:160, h:0.1, color:'#888078', fixed:true, isFlat:true },
+  { id:'track', name:'田徑場', lx:12,  lz:-5, w:22, d:40,  h:0.1, color:'#A04838', isFlat:true },
+  { id:'field', name:'草皮內場',lx:12, lz:-5, w:14, d:28,  h:0.1, color:'#3A6828', isFlat:true },
+  { id:'court1',name:'籃球場A', lx:26, lz:-32,w:6,  d:10,  h:0.1, color:'#8B4A30', isFlat:true },
+  { id:'court2',name:'籃球場B', lx:26, lz:-21,w:6,  d:10,  h:0.1, color:'#8B4A30', isFlat:true },
+  { id:'court3',name:'籃球場C', lx:26, lz:-10,w:6,  d:10,  h:0.1, color:'#8B4A30', isFlat:true },
+  { id:'TR',    name:'研揚大樓 TR', lx:15, lz:-35, w:8,  d:30, h:26, color:'#C89858' },
+  { id:'T1',    name:'第一教學 T1',  lx:10, lz:10,  w:10, d:8,  h:22, color:'#9AB0C0' },
+  { id:'AU',    name:'視聽館 AU',    lx:8,  lz:25,  w:8,  d:8,  h:10, color:'#B89060' },
+  { id:'T4',    name:'第四教學 T4',  lx:30, lz:35,  w:8,  d:28, h:22, color:'#AA9068' },
+  { id:'RB',    name:'綜合研究 RB',  lx:12, lz:42,  w:16, d:20, h:16, color:'#B8A080' },
+  { id:'LIB',   name:'圖書館',       lx:12, lz:68,  w:18, d:18, h:28, color:'#D8C080' },
+  { id:'E1',    name:'工程一館 E1',  lx:38, lz:50,  w:8,  d:28, h:14, color:'#90A098' },
+];
+
+let buildings = JSON.parse(JSON.stringify(DEFAULTS));
+let selected = null;
+let drag = null;
+let pan = null;
+
+// ── Canvas state ─────────────────────────────────────────────
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let viewX = 0, viewY = 0, zoom = 3.5;
+
+function resize() {
+  cv.width = cv.parentElement.clientWidth * devicePixelRatio;
+  cv.height = cv.parentElement.clientHeight * devicePixelRatio;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+// ── Coordinate transform: lx,lz → canvas px ─────────────────
+// Canvas: X = lz (right), Y = -lx (up = deeper = higher lx)
+function toCanvas(lx, lz) {
+  const cx = cv.width/2 + (lz - viewX) * zoom;
+  const cy = cv.height/2 - (lx - viewY) * zoom;
+  return [cx, cy];
+}
+function fromCanvas(cx, cy) {
+  const lz = (cx - cv.width/2) / zoom + viewX;
+  const lx = -(cy - cv.height/2) / zoom + viewY;
+  return [lx, lz];
+}
+
+// ── Drawing ──────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  // Grid
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1;
+  const gridStep = 10;
+  const [tlx, tlz] = fromCanvas(0, 0);
+  const [brx, brz] = fromCanvas(cv.width, cv.height);
+  for (let z = Math.floor(tlz/gridStep)*gridStep; z <= brz; z += gridStep) {
+    const [x1, y1] = toCanvas(0, z);
+    ctx.beginPath(); ctx.moveTo(x1, 0); ctx.lineTo(x1, cv.height); ctx.stroke();
+  }
+  for (let x = Math.floor(brx/gridStep)*gridStep; x <= tlx; x += gridStep) {
+    const [x1, y1] = toCanvas(x, 0);
+    ctx.beginPath(); ctx.moveTo(0, y1); ctx.lineTo(cv.width, y1); ctx.stroke();
+  }
+
+  // Axis labels
+  ctx.fillStyle = '#555';
+  ctx.font = `${11 * devicePixelRatio}px system-ui`;
+  const [ox, oy] = toCanvas(0, 0);
+  ctx.fillText('lz →', ox + 20, oy - 8);
+  ctx.fillText('↑ lx (深)', ox + 5, oy - 30);
+
+  // Compass
+  const [cx0, cy0] = toCanvas(-25, -55);
+  ctx.save();
+  ctx.translate(cx0, cy0);
+  const compassR = 20 * devicePixelRatio;
+  ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0,0,compassR,0,Math.PI*2); ctx.stroke();
+  // N = bottom-left in isometric, but in our top-down: N = left+down (low lz, low lx)
+  // For simplicity show which direction is which
+  ctx.fillStyle = '#e2b714'; ctx.font = `bold ${10*devicePixelRatio}px system-ui`;
+  ctx.fillText('← 北(左下)', compassR+5, 4);
+  ctx.restore();
+
+  // Draw buildings (flat first, then 3D)
+  buildings.forEach(b => {
+    const [cx, cy] = toCanvas(b.lx, b.lz);
+    const pw = b.d * zoom; // lz extent → canvas X
+    const ph = b.w * zoom; // lx extent → canvas Y (inverted)
+
+    ctx.globalAlpha = b.isFlat ? 0.6 : 0.85;
+    ctx.fillStyle = b.color;
+    ctx.fillRect(cx - pw/2, cy - ph/2, pw, ph);
+
+    // Outline
+    ctx.strokeStyle = (selected === b) ? '#e2b714' : '#555';
+    ctx.lineWidth = (selected === b) ? 3 : 1;
+    ctx.strokeRect(cx - pw/2, cy - ph/2, pw, ph);
+
+    // Label
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff';
+    const fontSize = Math.max(9, Math.min(14, b.d * zoom * 0.2)) * devicePixelRatio;
+    ctx.font = `bold ${fontSize}px system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (!b.isFlat || b.id === 'track') {
+      ctx.fillText(b.name, cx, cy);
+    }
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ── Hit test ─────────────────────────────────────────────────
+function hitTest(canvasX, canvasY) {
+  // Reverse order so top-drawn (last) items are hit first
+  for (let i = buildings.length - 1; i >= 0; i--) {
+    const b = buildings[i];
+    if (b.fixed) continue;
+    const [cx, cy] = toCanvas(b.lx, b.lz);
+    const pw = b.d * zoom, ph = b.w * zoom;
+    if (canvasX >= cx-pw/2 && canvasX <= cx+pw/2 && canvasY >= cy-ph/2 && canvasY <= cy+ph/2) {
+      return b;
+    }
+  }
+  return null;
+}
+
+// ── Mouse events ─────────────────────────────────────────────
+cv.addEventListener('mousedown', e => {
+  const rect = cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * devicePixelRatio;
+  const my = (e.clientY - rect.top) * devicePixelRatio;
+
+  if (e.button === 2 || e.button === 1) {
+    pan = { x: e.clientX, y: e.clientY };
+    return;
+  }
+
+  const hit = hitTest(mx, my);
+  if (hit) {
+    selected = hit;
+    drag = { offX: hit.lz - fromCanvas(mx, my)[1], offY: hit.lx - fromCanvas(mx, my)[0] };
+  } else {
+    selected = null;
+  }
+  buildCards();
+  draw();
+});
+
+cv.addEventListener('mousemove', e => {
+  const rect = cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * devicePixelRatio;
+  const my = (e.clientY - rect.top) * devicePixelRatio;
+
+  if (pan) {
+    viewX -= (e.clientX - pan.x) * devicePixelRatio / zoom;
+    viewY += (e.clientY - pan.y) * devicePixelRatio / zoom;
+    pan = { x: e.clientX, y: e.clientY };
+    draw();
+    return;
+  }
+
+  if (drag && selected) {
+    const [lx, lz] = fromCanvas(mx, my);
+    selected.lx = Math.round((lx + drag.offY) * 2) / 2;
+    selected.lz = Math.round((lz + drag.offX) * 2) / 2;
+    updateCard(selected);
+    draw();
+  }
+});
+
+cv.addEventListener('mouseup', () => { drag = null; pan = null; });
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 0.9 : 1.1;
+  zoom = Math.max(1, Math.min(15, zoom * factor));
+  draw();
+}, { passive: false });
+
+// ── Sidebar cards ────────────────────────────────────────────
+const cardsEl = document.getElementById('cards');
+
+function buildCards() {
+  cardsEl.innerHTML = '';
+  buildings.filter(b => !b.fixed).forEach(b => {
+    const card = document.createElement('div');
+    card.className = 'bld-card' + (selected === b ? ' active' : '');
+    card.innerHTML = `
+      <div class="name" style="color:${b.color}">${b.name}</div>
+      <div class="coords" id="coord-${b.id}">lx=${b.lx} lz=${b.lz}</div>
+      <div class="dim-row">
+        <div><label>W(深)</label><input type="number" value="${b.w}" data-id="${b.id}" data-prop="w" step="1"></div>
+        <div><label>D(寬)</label><input type="number" value="${b.d}" data-id="${b.id}" data-prop="d" step="1"></div>
+        ${b.isFlat ? '' : `<div><label>H(高)</label><input type="number" value="${b.h}" data-id="${b.id}" data-prop="h" step="1"></div>`}
+      </div>
+    `;
+    card.addEventListener('click', () => { selected = b; buildCards(); draw(); });
+    cardsEl.appendChild(card);
+  });
+
+  cardsEl.querySelectorAll('input[data-id]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const b = buildings.find(x => x.id === e.target.dataset.id);
+      if (b) { b[e.target.dataset.prop] = parseFloat(e.target.value) || 0; draw(); }
+    });
+    inp.addEventListener('click', e => e.stopPropagation());
+  });
+}
+
+function updateCard(b) {
+  const el = document.getElementById('coord-' + b.id);
+  if (el) el.textContent = `lx=${b.lx} lz=${b.lz}`;
+}
+
+// ── Code generation ──────────────────────────────────────────
+function showCode() {
+  const B = {};
+  buildings.forEach(b => B[b.id] = b);
+
+  const code = `// ── 由編輯器產生 ──
+function buildNTUST() {
+  const g = groupNTUST;
+  g.rotation.y = Math.PI * 0.75;
+
+  const matGnd   = new THREE.MeshLambertMaterial({color:0xC8C090});
+  const matPath  = new THREE.MeshLambertMaterial({color:0xB8B080});
+  const matRoad  = new THREE.MeshLambertMaterial({color:0x888078});
+  const matTrack = new THREE.MeshLambertMaterial({color:0xA04838});
+  const matCourt = new THREE.MeshLambertMaterial({color:0x8B4A30});
+  const matCourtLine = new THREE.MeshLambertMaterial({color:0x2A5E2A});
+  const matGrass = new THREE.MeshLambertMaterial({color:0x3A6828});
+  const matRoof  = new THREE.MeshLambertMaterial({color:0x7A7870});
+  const matTR  = new THREE.MeshLambertMaterial({color:0xC89858});
+  const matT1  = new THREE.MeshLambertMaterial({color:0x9AB0C0});
+  const matAU  = new THREE.MeshLambertMaterial({color:0xB89060});
+  const matRB  = new THREE.MeshLambertMaterial({color:0xB8A080});
+  const matLib = new THREE.MeshLambertMaterial({color:0xD8C080});
+  const matT4  = new THREE.MeshLambertMaterial({color:0xAA9068});
+  const matE1  = new THREE.MeshLambertMaterial({color:0x90A098});
+  const matWin = new THREE.MeshLambertMaterial({color:0x4868A0,transparent:true,opacity:0.75});
+
+  // Ground
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(80, 160), matGnd);
+  gnd.rotation.x = -Math.PI/2; gnd.position.set(12, 0, 15);
+  gnd.receiveShadow = true; g.add(gnd);
+
+  // Road
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(${B.road.w}, ${B.road.d}), matRoad);
+  road.rotation.x = -Math.PI/2; road.position.set(${B.road.lx}, 0.01, ${B.road.lz}); g.add(road);
+
+  // Walkways
+  [[0,0.01,5,50,4],[12,0.01,25,4,40],[8,0.01,50,4,40]].forEach(([x,y,z,w,d])=>{
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w,d), matPath);
+    p.rotation.x = -Math.PI/2; p.position.set(x,y,z); g.add(p);
+  });
+
+  // Running Track
+  const trkBase = new THREE.Mesh(new THREE.PlaneGeometry(${B.track.w}, ${B.track.d}), matTrack);
+  trkBase.rotation.x = -Math.PI/2; trkBase.position.set(${B.track.lx}, 0.02, ${B.track.lz}); g.add(trkBase);
+  const trkGrass = new THREE.Mesh(new THREE.PlaneGeometry(${B.field.w}, ${B.field.d}), matGrass);
+  trkGrass.rotation.x = -Math.PI/2; trkGrass.position.set(${B.field.lx}, 0.03, ${B.field.lz}); g.add(trkGrass);
+
+  // Basketball Courts
+  [${B.court1.lz},${B.court2.lz},${B.court3.lz}].forEach(lz => {
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(${B.court1.w}, ${B.court1.d}), matCourt);
+    c.rotation.x = -Math.PI/2; c.position.set(${B.court1.lx}, 0.02, lz); g.add(c);
+    const cl = new THREE.Mesh(new THREE.PlaneGeometry(${Math.max(1,B.court1.w-1)}, ${Math.max(1,B.court1.d-1.5)}), matCourtLine);
+    cl.rotation.x = -Math.PI/2; cl.position.set(${B.court1.lx}, 0.03, lz); g.add(cl);
+  });
+
+${genBuilding(B.TR, 'matTR', '研揚大樓 TR', 8, 2)}
+${genBuilding(B.T1, 'matT1', 'T1', 4, 1.5)}
+${genBuilding(B.AU, 'matAU', '視聽館 AU', 5, 1.5)}
+${genBuilding(B.T4, 'matT4', 'T4', 4, 1.5)}
+${genBuilding(B.RB, 'matRB', '綜合研究大樓 RB', 8, 1.5)}
+${genBuilding(B.LIB,'matLib','圖書館', 5, 1.5)}
+${genBuilding(B.E1, 'matE1', 'E1', 4, 1.5)}
+
+  // Trees
+  [[-5,-45],[-5,-25],[-5,0],[5,-50],[5,20],
+   [20,15],[20,55],[35,15],[35,60],[2,75],[18,80],
+   [2,58],[28,70],[-8,35],[-8,55],[0,90],[15,90]].forEach(([x,z])=>addTree(g,x,z));
+
+  // Taxi
+  const taxi = new THREE.Group();
+  addBox(taxi,0,0.6,0,2.5,1.2,1.2,new THREE.MeshLambertMaterial({color:0xFFCC00}));
+  taxi.position.set(${B.road.lx+3}, 0, -10); g.add(taxi);
+}`;
+
+  document.getElementById('code-out').textContent = code;
+  document.getElementById('code-modal').classList.add('show');
+}
+
+function genBuilding(b, matName, label, lblW, lblH) {
+  const yc = b.h / 2;
+  const floors = Math.floor(b.h / 5);
+  const winYs = [];
+  for (let i = 1; i <= floors; i++) winYs.push(Math.round(i * b.h / (floors + 1)));
+  return `  // ${b.name}
+  addBox(g, ${b.lx}, ${yc}, ${b.lz}, ${b.w}, ${b.h}, ${b.d}, ${matName});
+  addBox(g, ${b.lx}, ${b.h + 0.3}, ${b.lz}, ${b.w+1.5}, 0.6, ${b.d+1.5}, matRoof);
+  [${winYs.join(',')}].forEach(y => addWindowBand(g,${b.lx},${b.lz},${b.w},${b.d},y,matWin));
+  const ${b.id.toLowerCase()}Lbl = textLabel('${label}', ${lblW}, ${lblH}); ${b.id.toLowerCase()}Lbl.position.set(${b.lx},${b.h+2},${b.lz}); g.add(${b.id.toLowerCase()}Lbl);
+`;
+}
+
+function hideCode() { document.getElementById('code-modal').classList.remove('show'); }
+
+function resetAll() {
+  buildings = JSON.parse(JSON.stringify(DEFAULTS));
+  selected = null;
+  buildCards();
+  draw();
+}
+
+// ── Init ─────────────────────────────────────────────────────
+resize();
+viewX = 15; viewY = 15;
+buildCards();
+draw();
+</script>
+</body></html>

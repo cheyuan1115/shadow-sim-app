@@ -60,7 +60,12 @@
       position:sticky; top:0; background:rgba(13,17,23,0.95); z-index:1;
     }
     .panel-header .icon { font-size:20px; }
-    .panel-header .title { font-size:15px; font-weight:700; color:#A0C4A0; letter-spacing:0.5px; }
+    .panel-header .title { font-size:15px; font-weight:700; color:#A0C4A0; letter-spacing:0.5px; flex:1; }
+    .header-btn { background:none; border:1px solid rgba(106,138,106,0.3); color:#9AB89A; border-radius:6px; padding:4px 8px; cursor:pointer; font-size:14px; transition:all 0.15s; }
+    .header-btn:hover { background:rgba(106,138,106,0.2); }
+    .play-btn { background:none; border:1px solid rgba(106,138,106,0.3); color:#9AB89A; border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; flex-shrink:0; }
+    .play-btn:hover { background:rgba(106,138,106,0.2); }
+    .play-btn.active { background:rgba(106,138,106,0.3); border-color:#6A8A6A; color:#C8E8C8; }
 
     /* ── Section ── */
     .section { padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.06); }
@@ -186,6 +191,7 @@
   <div class="panel-header">
     <span class="icon">🌞</span>
     <span class="title">光影建築+</span>
+    <button class="header-btn" onclick="screenshot()" title="截圖">📷</button>
   </div>
 
   <!-- 場景 -->
@@ -200,6 +206,9 @@
       </button>
       <button class="preset-btn" id="btn-indoor" onclick="setPreset('indoor')">
         <span class="pb-icon">🏠</span>室內採光
+      </button>
+      <button class="preset-btn" id="btn-custom" onclick="setPreset('custom')">
+        <span class="pb-icon">🔨</span>自建
       </button>
     </div>
   </div>
@@ -240,17 +249,51 @@
       <input type="range" id="hour-slider" min="5" max="19" step="0.25" value="12"
         oninput="onHourChange(this.value)">
       <span class="slider-val" id="hour-val">12:00</span>
+      <button class="play-btn" id="play-btn" onclick="togglePlay()" title="自動播放">▶</button>
     </div>
   </div>
 
-  <!-- 月份 -->
+  <!-- 月份 / 日期 -->
   <div class="section">
-    <div class="section-label">月份</div>
+    <div class="section-label">日期</div>
     <div class="slider-row">
       <span class="slider-label">月</span>
       <input type="range" id="month-slider" min="1" max="12" step="1" value="6"
         oninput="onMonthChange(this.value)">
       <span class="slider-val" id="month-val">6月</span>
+    </div>
+    <div class="slider-row" style="margin-top:6px">
+      <span class="slider-label">日</span>
+      <input type="range" id="day-slider" min="1" max="31" step="1" value="15"
+        oninput="onDayChange(this.value)">
+      <span class="slider-val" id="day-val">15日</span>
+    </div>
+  </div>
+
+  <!-- 自訂建築 -->
+  <div class="section" id="custom-section" style="display:none">
+    <div class="section-label">自訂建築</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button class="season-btn" onclick="addCustomBuilding()" style="flex:1">＋ 新增建築</button>
+      <button class="season-btn" onclick="runSunlightAnalysis()" style="flex:1" id="analysis-btn">☀️ 日照分析</button>
+      <button class="season-btn" onclick="clearSunlightAnalysis()" style="flex:0.5">清除</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap" id="building-chips"></div>
+    <div id="building-editor" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span id="editor-title" style="font-size:12px;color:#C8E8C8;font-weight:600"></span>
+        <div style="display:flex;gap:4px">
+          <button class="season-btn" onclick="toggleBuildingTransparency()" style="padding:4px 8px;font-size:10px">👻 透明</button>
+          <button class="season-btn" onclick="deleteCustomBuilding()" style="padding:4px 8px;font-size:10px;border-color:#4A2020;color:#FF6B6B">🗑 刪除</button>
+        </div>
+      </div>
+      <div id="editor-sliders"></div>
+    </div>
+    <div id="spacing-info" style="display:none;margin-top:6px;font-size:11px;color:#4FC3F7"></div>
+    <div id="analysis-result" style="display:none;margin-top:6px;font-size:11px;color:#81C784"></div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button class="season-btn" onclick="saveCustomBuildings()" style="flex:1">💾 儲存</button>
+      <button class="season-btn" onclick="loadCustomBuildings()" style="flex:1">📂 讀取</button>
     </div>
   </div>
 
@@ -377,7 +420,7 @@ function fmt(h) {
 // ════════════════════════════════════════════════════════
 const DEG = Math.PI / 180;
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -389,7 +432,36 @@ renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xA8C4DC, 0.007);
 
-const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.5, 300);
+// Sky gradient sphere
+const skyGeo = new THREE.SphereGeometry(350, 32, 16);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: {
+    topColor: { value: new THREE.Color(0x0077ff) },
+    bottomColor: { value: new THREE.Color(0xC8DCF0) },
+    offset: { value: 20 },
+    exponent: { value: 0.6 }
+  },
+  vertexShader: `varying vec3 vWorldPosition;
+    void main() {
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPos.xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: `uniform vec3 topColor;
+    uniform vec3 bottomColor;
+    uniform float offset;
+    uniform float exponent;
+    varying vec3 vWorldPosition;
+    void main() {
+      float h = normalize(vWorldPosition + offset).y;
+      gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+    }`,
+  side: THREE.BackSide
+});
+const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+scene.add(skyMesh);
+
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.5, 800);
 let camTheta = DEG * 40, camPhi = DEG * 55, camRadius = 65;
 let camTarget = new THREE.Vector3(0, 8, 0);
 
@@ -435,7 +507,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   const minR = currentPreset === 'indoor' ? 4 : 15;
-  const maxR = currentPreset === 'indoor' ? 20 : 120;
+  const maxR = currentPreset === 'indoor' ? 20 : (currentPreset === 'ntust' ? 500 : (currentPreset === 'custom' ? 300 : 120));
   camRadius = Math.max(minR, Math.min(maxR, camRadius * (1 + e.deltaY * 0.001)));
   updateCamera();
 }, { passive: false });
@@ -477,7 +549,7 @@ canvas.addEventListener('touchmove', e => {
 
     // 縮放
     const minR = currentPreset === 'indoor' ? 4 : 15;
-    const maxR = currentPreset === 'indoor' ? 20 : 120;
+    const maxR = currentPreset === 'indoor' ? 20 : (currentPreset === 'custom' ? 300 : (currentPreset === 'ntust' ? 500 : 120));
     camRadius = Math.max(minR, Math.min(maxR, camRadius * (pinchDist / newDist)));
 
     // 平移：中點移動 → 移動 camTarget
@@ -506,10 +578,10 @@ canvas.addEventListener('touchend', e => {
 });
 
 // Lighting
-const sunLight = new THREE.DirectionalLight(0xFFF5DC, 2.5);
+const sunLight = new THREE.DirectionalLight(0xFFF5DC, 1.5);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
-sunLight.shadow.camera.near = 1; sunLight.shadow.camera.far = 200;
+sunLight.shadow.camera.near = 1; sunLight.shadow.camera.far = 600;
 sunLight.shadow.camera.left = -55; sunLight.shadow.camera.right = 55;
 sunLight.shadow.camera.top = 55; sunLight.shadow.camera.bottom = -55;
 sunLight.shadow.bias = -0.0006;
@@ -586,6 +658,8 @@ const groupNTUST  = new THREE.Group(); scene.add(groupNTUST);
 const groupIndoor = new THREE.Group(); scene.add(groupIndoor);
 groupNTUST.visible  = false;
 groupIndoor.visible = false;
+const groupCustom = new THREE.Group(); scene.add(groupCustom);
+groupCustom.visible = false;
 let MAIN_H_REF = 38;
 
 // ── Scene A: 台北101 ──────────────────────────────────────────
@@ -655,148 +729,137 @@ function buildTaipei101() {
   g.add(compassLabel('E 東',24,0,Math.PI/2)); g.add(compassLabel('W 西',-24,0,Math.PI/2));
 }
 
-// ── Scene B: 台科大 ───────────────────────────────────────────
-// 依官方立體配置圖（左下角=北, 右下角=東, 左上角=西, 右上角=南）
-// Three.js: +X=東, -Z=北, +Z=南
-// TR(西) - 跑道/球場(西北) - T1/T4/E1(中) - AU/RB/Library(東) - 基隆路(東)
-// 跑道橢圓: 南北向(N-S elongated), 球場在跑道南側
+// ── Scene B: 台科大（由編輯器產生）──────────────────────────
 function buildNTUST() {
   const g = groupNTUST;
-  const matGnd   = new THREE.MeshLambertMaterial({color:0xC8C0A0});
-  const matPath  = new THREE.MeshLambertMaterial({color:0xDED6BC});
-  const matGrass = new THREE.MeshLambertMaterial({color:0x6A9050});
-  const matRoof  = new THREE.MeshLambertMaterial({color:0x606060});
-  const matWin   = new THREE.MeshLambertMaterial({color:0x5A7888,transparent:true,opacity:0.7});
-  const matRB    = new THREE.MeshLambertMaterial({color:0xD0C8B8});
-  const matTR    = new THREE.MeshLambertMaterial({color:0xA8A098});
-  const matLib   = new THREE.MeshLambertMaterial({color:0xD8D4C8});
-  const matT1    = new THREE.MeshLambertMaterial({color:0xBCB4A4});
-  const matT4    = new THREE.MeshLambertMaterial({color:0xB8B0A0});
-  const matGls   = new THREE.MeshLambertMaterial({color:0x6090AA,transparent:true,opacity:0.7});
-  const matTrack = new THREE.MeshLambertMaterial({color:0xBB4444});
-  const matInner = new THREE.MeshLambertMaterial({color:0x4A6844});
-  const tennisMat= new THREE.MeshLambertMaterial({color:0x4878A0});
-  const bballMat = new THREE.MeshLambertMaterial({color:0xC06830});
+  g.rotation.y = -Math.PI * 0.25;
 
-  // Ground
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(100,100), matGnd);
-  gnd.rotation.x = -Math.PI/2; gnd.receiveShadow = true; g.add(gnd);
+  const matGnd   = new THREE.MeshLambertMaterial({color:0xC8C090});
+  const matPath  = new THREE.MeshLambertMaterial({color:0xB8B080});
+  const matRoad  = new THREE.MeshLambertMaterial({color:0x888078});
+  const matTrack = new THREE.MeshLambertMaterial({color:0xA04838});
+  const matCourt = new THREE.MeshLambertMaterial({color:0x8B4A30});
+  const matCourtLine = new THREE.MeshLambertMaterial({color:0x2A5E2A});
+  const matGrass = new THREE.MeshLambertMaterial({color:0x3A6828});
+  const matRoof  = new THREE.MeshLambertMaterial({color:0x7A7870});
+  const matTR  = new THREE.MeshLambertMaterial({color:0xC89858});
+  const matT1  = new THREE.MeshLambertMaterial({color:0x9AB0C0});
+  const matAU  = new THREE.MeshLambertMaterial({color:0xB89060});
+  const matRB  = new THREE.MeshLambertMaterial({color:0xB8A080});
+  const matLib = new THREE.MeshLambertMaterial({color:0xD8C080});
+  const matT4  = new THREE.MeshLambertMaterial({color:0xAA9068});
+  const matE1  = new THREE.MeshLambertMaterial({color:0x90A098});
+  const matWin = new THREE.MeshLambertMaterial({color:0x4868A0,transparent:true,opacity:0.75});
 
-  // 主要道路
-  [[-2,0,48,4],[-12,6,4,18],[4,6,4,18]].forEach(([x,z,w,d])=>{
-    const p=new THREE.Mesh(new THREE.PlaneGeometry(w,d),matPath);
-    p.rotation.x=-Math.PI/2; p.position.set(x,0.01,z); p.receiveShadow=true; g.add(p);
+   // Ground
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(200, 300), matGnd);
+  gnd.rotation.x = -Math.PI/2; gnd.position.set(30, 0, 20);
+  gnd.receiveShadow = true; g.add(gnd);
+
+  // Road
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(10, 160), matRoad);
+  road.rotation.x = -Math.PI/2; road.position.set(-15, 0.01, 15);
+  road.receiveShadow = true; g.add(road);
+
+  // Walkways
+  [[0,0.01,5,50,4],[12,0.01,25,4,40],[8,0.01,50,4,40]].forEach(([x,y,z,w,d])=>{
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w,d), matPath);
+    p.rotation.x = -Math.PI/2; p.position.set(x,y,z); p.receiveShadow = true; g.add(p);
   });
-  // 中央草地廣場
-  [{x:0,z:0,w:6,d:6},{x:10,z:4,w:5,d:5}].forEach(({x,z,w,d})=>{
-    const gr=new THREE.Mesh(new THREE.PlaneGeometry(w,d),matGrass);
-    gr.rotation.x=-Math.PI/2; gr.position.set(x,0.02,z); gr.receiveShadow=true; g.add(gr);
-  });
 
-  // ── TR 研揚大樓 (西側，南北向細長) ───────────────────────
-  // center (-20, 0), w=5, d=12, h=30
-  addBox(g, -20,15,0, 5.0,30,12.0, matTR);
-  addBox(g, -20,31,0, 3.5,2.0,12.0, matTR);
-  addBox(g, -20,32.2,0, 2.8,0.4,12.0, matRoof);
-  for(let f=1;f<=10;f++){
-    const wm=new THREE.Mesh(new THREE.PlaneGeometry(10.0,2.2),matGls);
-    wm.position.set(-17.48,f*2.9-1.0,0); wm.rotation.y=Math.PI/2; g.add(wm);
+  // Running Track (rounded stadium shape)
+  function makeTrackShape(w, d) {
+    const r = w/2, s = new THREE.Shape();
+    s.moveTo(-d/2+r, -w/2);
+    s.lineTo(d/2-r, -w/2);
+    s.absarc(d/2-r, 0, w/2, -Math.PI/2, Math.PI/2, false);
+    s.lineTo(-d/2+r, w/2);
+    s.absarc(-d/2+r, 0, w/2, Math.PI/2, Math.PI*3/2, false);
+    return s;
   }
-  const trLbl=textLabel('TR 研揚大樓',3.8,0.85); trLbl.position.set(-20,34,0); g.add(trLbl);
-
-  // ── 跑道 (西北，南北向橢圓) ─────────────────────────────
-  // 中心(-13,-8), 南北向: 直段 w=8 d=8, 北端半圓r=4在z=-12, 南端r=4在z=-4
-  const trkRect=new THREE.Mesh(new THREE.PlaneGeometry(8,8),matTrack);
-  trkRect.rotation.x=-Math.PI/2; trkRect.position.set(-13,0.03,-8); trkRect.receiveShadow=true; g.add(trkRect);
-  [[-13,-12],[-13,-4]].forEach(([x,z])=>{
-    const e=new THREE.Mesh(new THREE.CircleGeometry(4,32),matTrack);
-    e.rotation.x=-Math.PI/2; e.position.set(x,0.03,z); e.receiveShadow=true; g.add(e);
-  });
-  const trkInR=new THREE.Mesh(new THREE.PlaneGeometry(4,8),matInner);
-  trkInR.rotation.x=-Math.PI/2; trkInR.position.set(-13,0.04,-8); trkInR.receiveShadow=true; g.add(trkInR);
-  [[-13,-12],[-13,-4]].forEach(([x,z])=>{
-    const ei=new THREE.Mesh(new THREE.CircleGeometry(2,32),matInner);
-    ei.rotation.x=-Math.PI/2; ei.position.set(x,0.04,z); ei.receiveShadow=true; g.add(ei);
-  });
-
-  // ── 球場 (跑道南側，三面並排東西向) ──────────────────────
-  // 跑道南端 z=-4+4=0，球場從 z=+2 開始
-  // 籃球1(x=-15,z=+4), 籃球2(x=-9,z=+4), 網球(x=-3,z=+4), w=5 d=9
-  [[-15,bballMat],[-9,bballMat],[-3,tennisMat]].forEach(([x,mat])=>{
-    const ct=new THREE.Mesh(new THREE.PlaneGeometry(5,9),mat);
-    ct.rotation.x=-Math.PI/2; ct.position.set(x,0.03,4); ct.receiveShadow=true; g.add(ct);
-  });
-  [-12,-6].forEach(x=>{
-    const ln=new THREE.Mesh(new THREE.PlaneGeometry(0.2,9),new THREE.MeshLambertMaterial({color:0xFFFFFF}));
-    ln.rotation.x=-Math.PI/2; ln.position.set(x,0.04,4); g.add(ln);
+  const trkOuter = new THREE.Mesh(new THREE.ShapeGeometry(makeTrackShape(45,80)), matTrack);
+  trkOuter.rotation.set(-Math.PI/2, 0, Math.PI/2); trkOuter.position.set(19, 0.02, -2);
+  trkOuter.receiveShadow = true; g.add(trkOuter);
+  const trkInner = new THREE.Mesh(new THREE.ShapeGeometry(makeTrackShape(30,60)), matGrass);
+  trkInner.rotation.set(-Math.PI/2, 0, Math.PI/2); trkInner.position.set(18.5, 0.03, -0.5);
+  trkInner.receiveShadow = true; g.add(trkInner);
+  // Basketball Courts
+  [-28,-15,18.5].forEach(lz => {
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(30, 10), matCourt);
+    c.rotation.x = -Math.PI/2; c.position.set(59, 0.02, lz);
+    c.receiveShadow = true; g.add(c);
+    const cl = new THREE.Mesh(new THREE.PlaneGeometry(29, 8.5), matCourtLine);
+    cl.rotation.x = -Math.PI/2; cl.position.set(59, 0.03, lz);
+    cl.receiveShadow = true; g.add(cl);
   });
 
-  // ── E1 工程一館 (北側中央) ───────────────────────────────
-  // center (-2,-10), w=12, d=5, h=12
-  addBox(g, -2,6,-10, 12.0,12,5.0, matT4);
-  addBox(g, -2,12.2,-10, 12.2,0.4,5.2, matRoof);
-  for(let f=1;f<=4;f++) addWindowBand(g,-2,-10,12.0,5.0,f*2.6,matWin);
-  const e1Lbl=textLabel('E1 工程一館',4.0,0.8); e1Lbl.position.set(-2,14,-10); g.add(e1Lbl);
+  // 研揚大樓 TR
+  addBox(g, 40.5, 25, -50.5, 90, 50, 20, matTR);
+  addBox(g, 40.5, 50.3, -50.5, 91.5, 0.6, 21.5, matRoof);
+  [5,9,14,18,23,27,32,36,41,45].forEach(y => addWindowBand(g,40.5,-50.5,90,20,y,matWin));
+  const trLbl = textLabel('研揚大樓 TR', 8, 2); trLbl.position.set(40.5,52,-50.5); g.add(trLbl);
 
-  // ── T1 第一教學大樓 (中西，南北向) ──────────────────────
-  // center (+2, +3), w=4, d=10, h=18
-  addBox(g, 2,9,3, 4.0,18,10.0, matT1);
-  addBox(g, 2,18.2,3, 4.2,0.4,10.2, matRoof);
-  for(let f=1;f<=6;f++) addWindowBand(g,2,3,4.0,10.0,f*2.8,matWin);
-  const t1Lbl=textLabel('T1 第一教學大樓',4.5,0.9); t1Lbl.position.set(2,20,3); g.add(t1Lbl);
+  // 第一教學 T1
+  addBox(g, 22, 10, 47, 50, 20, 15, matT1);
+  addBox(g, 22, 20.3, 47, 51.5, 0.6, 16.5, matRoof);
+  [4,8,12,16].forEach(y => addWindowBand(g,22,47,50,15,y,matWin));
+  const t1Lbl = textLabel('T1', 4, 1.5); t1Lbl.position.set(22,22,47); g.add(t1Lbl);
 
-  // ── T4 第四教學大樓 (中央，東西向扁長) ───────────────────
-  // center (+6, -5), w=12, d=5, h=16
-  addBox(g, 6,8,-5, 12.0,16,5.0, matT4);
-  addBox(g, 6,16.2,-5, 12.2,0.4,5.2, matRoof);
-  for(let f=1;f<=5;f++) addWindowBand(g,6,-5,12.0,5.0,f*2.8,matWin);
-  const t4Lbl=textLabel('T4 第四教學大樓',4.5,0.9); t4Lbl.position.set(6,18,-5); g.add(t4Lbl);
+  // 視聽館 AU
+  addBox(g, 35, 3, 72, 8, 6, 8, matAU);
+  addBox(g, 35, 6.3, 72, 9.5, 0.6, 9.5, matRoof);
+  [3].forEach(y => addWindowBand(g,35,72,8,8,y,matWin));
+  const auLbl = textLabel('視聽館 AU', 5, 1.5); auLbl.position.set(35,8,72); g.add(auLbl);
 
-  // ── AU 視聽館 (中東) ─────────────────────────────────────
-  // center (+8, +3), w=6, d=6, h=10
-  addBox(g, 8,5,3, 6.0,10,6.0, matT4);
-  addBox(g, 8,10.2,3, 6.2,0.4,6.2, matRoof);
-  const auLbl=textLabel('AU 視聽館',3.0,0.7); auLbl.position.set(8,12,3); g.add(auLbl);
-  const pond=new THREE.Mesh(new THREE.CircleGeometry(1.5,24),new THREE.MeshLambertMaterial({color:0x5090B0}));
-  pond.rotation.x=-Math.PI/2; pond.position.set(5,0.05,1); g.add(pond);
+  // 第四教學 T4
+  addBox(g, 51.5, 10, 82, 15, 20, 42, matT4);
+  addBox(g, 51.5, 20.3, 82, 16.5, 0.6, 43.5, matRoof);
+  [4,8,12,16].forEach(y => addWindowBand(g,51.5,82,15,42,y,matWin));
+  const t4Lbl = textLabel('T4', 4, 1.5); t4Lbl.position.set(51.5,22,82); g.add(t4Lbl);
 
-  // ── RB 綜合研究大樓/建築系 (中東偏南) ────────────────────
-  // center (+8, +11), w=8, d=10, h=26
-  addBox(g, 8,13,11, 8.0,26,10.0, matRB);
-  addBox(g, 8,26.5,11, 6.5,3.0,8.0, matRB);
-  addBox(g, 8,28.2,11, 5.5,0.4,6.5, matRoof);
-  for(let f=1;f<=8;f++) addBox(g,8,f*3.0-0.1,16.2,8.2,0.2,0.5,matRoof);
-  for(let f=1;f<=8;f++){
-    const wm=new THREE.Mesh(new THREE.PlaneGeometry(6,2.5),matGls);
-    wm.position.set(8,f*3.0-1.3,16.02); wm.rotation.y=Math.PI; g.add(wm);
-  }
-  const rbLbl=textLabel('RB 建築系 8F',5.0,1.0); rbLbl.position.set(8,30.5,12); g.add(rbLbl);
+  // 綜合研究 RB
+  addBox(g, 18.5, 10, 73.5, 17, 20, 31, matRB);
+  addBox(g, 18.5, 20.3, 73.5, 18.5, 0.6, 32.5, matRoof);
+  [4,8,12,16].forEach(y => addWindowBand(g,18.5,73.5,17,31,y,matWin));
+  const rbLbl = textLabel('綜合研究大樓 RB', 8, 1.5); rbLbl.position.set(18.5,22,73.5); g.add(rbLbl);
 
-  // ── 圖書館 Library (東側) ────────────────────────────────
-  // center (+16, +2), w=8, d=12, h=28
-  addBox(g, 16,14,2, 8.0,28,12.0, matLib);
-  addBox(g, 16,28.2,2, 8.2,0.4,12.2, matRoof);
-  addBox(g, 20.05,6,2, 0.3,12,8.0, matGls);
-  for(let f=1;f<=8;f++) addWindowBand(g,16,2,8.0,12.0,f*3.2,matWin);
-  const libLbl=textLabel('圖書館 Library',4.2,0.9); libLbl.position.set(16,30,2); g.add(libLbl);
+  // 圖書館
+  addBox(g, 25.5, 10, 97, 30, 20, 15, matLib);
+  addBox(g, 25.5, 20.3, 97, 31.5, 0.6, 16.5, matRoof);
+  [4,8,12,16].forEach(y => addWindowBand(g,25.5,97,30,15,y,matWin));
+  const libLbl = textLabel('圖書館', 5, 1.5); libLbl.position.set(25.5,22,97); g.add(libLbl);
 
-  // ── 校門 Gate (東側，基隆路) ─────────────────────────────
-  addBox(g, 24,2.5,-4, 0.8,5,0.8, matRoof);
-  addBox(g, 24,2.5, 4, 0.8,5,0.8, matRoof);
-  addBox(g, 24,5.2, 0, 0.5,0.4,8, matRoof);
-  const gateLbl=textLabel('國立臺灣科技大學',7.0,1.1); gateLbl.position.set(24,6.5,0); g.add(gateLbl);
+  // 工程一館 E1
+  addBox(g, 69, 8.5, 82, 8, 17, 42, matE1);
+  addBox(g, 69, 17.3, 82, 9.5, 0.6, 43.5, matRoof);
+  [4,9,13].forEach(y => addWindowBand(g,69,82,8,42,y,matWin));
+  const e1Lbl = textLabel('E1', 4, 1.5); e1Lbl.position.set(69,19,82); g.add(e1Lbl);
 
   // Trees
-  [[-22,-8],[-20,8],[-17,-2],[-8,-14],
-   [-4,-14],[0,-14],[-18,10],[-14,10],
-   [4,-8],[4,8],[12,-6],[12,8],
-   [20,-6],[20,8],[22,0],[0,10]
-  ].forEach(([x,z])=>addTree(g,x,z));
+  [[-5,-45],[-5,-25],[-5,0],[5,-50],[-8,20],
+   [-8,10],[20,55],[45,55],[35,60],[2,75],[18,80],
+   [2,58],[28,70],[-8,35],[-8,55],[0,90],[15,90]].forEach(([x,z])=>addTree(g,x,z));
 
-  g.add(compassLabel('N 北',0,-28)); g.add(compassLabel('S 南',0,28));
-  g.add(compassLabel('E 東',28,0,Math.PI/2)); g.add(compassLabel('W 西',-28,0,Math.PI/2));
+  // Taxi
+  const taxi = new THREE.Group();
+  addBox(taxi,0,0.6,0,2.5,1.2,1.2,new THREE.MeshLambertMaterial({color:0xFFCC00}));
+  taxi.position.set(-12, 0, -10); g.add(taxi);
+
+  // Fence (校園圍欄，沿道路側)
+  const matFence = new THREE.MeshLambertMaterial({color:0x666660});
+  for (let lz = -60; lz <= 100; lz += 5) {
+    addBox(g, -18, 1.2, lz, 0.3, 2.4, 0.3, matFence, false);
+  }
+  const railGeo = new THREE.BoxGeometry(0.15, 0.15, 165);
+  const rail1 = new THREE.Mesh(railGeo, matFence); rail1.position.set(-18, 2.2, 20); g.add(rail1);
+  const rail2 = new THREE.Mesh(railGeo, matFence); rail2.position.set(-18, 0.8, 20); g.add(rail2);
+
+  // Gate (校門口)
+  const matGate = new THREE.MeshLambertMaterial({color:0x888880});
+  addBox(g, -18, 2.5, -12, 0.5, 5, 1, matGate, false);
+  addBox(g, -18, 2.5, -4, 0.5, 5, 1, matGate, false);
+  addBox(g, -18, 4.8, -8, 0.3, 0.6, 9, matGate, false);
 }
-
 // ── Scene C: 室內採光 ─────────────────────────────────────────
 function buildIndoor() {
   const g = groupIndoor;
@@ -835,7 +898,448 @@ function buildIndoor() {
   head.position.set(2.5,1.85,-1.0); g.add(head);
 }
 
-buildTaipei101(); buildNTUST(); buildIndoor();
+// ── Scene D: 自建 ─────────────────────────────────────────
+let customGround = null;
+function buildCustom() {
+  const g = groupCustom;
+  const matGnd = new THREE.MeshLambertMaterial({color:0xC8C090});
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(200,200), matGnd);
+  gnd.rotation.x = -Math.PI/2; gnd.receiveShadow = true; g.add(gnd);
+  customGround = gnd;
+
+  const grid = new THREE.GridHelper(200, 20, 0x888870, 0x999980);
+  grid.position.y = 0.01; g.add(grid);
+
+  // Grass patch
+  const matGrass = new THREE.MeshLambertMaterial({color:0x5A8A48});
+  const grass = new THREE.Mesh(new THREE.PlaneGeometry(40,40), matGrass);
+  grass.rotation.x = -Math.PI/2; grass.position.set(-30,0.02,0); grass.receiveShadow = true; g.add(grass);
+
+  // Roads (crossing)
+  const matRoad = new THREE.MeshLambertMaterial({color:0x606060});
+  const roadH = new THREE.Mesh(new THREE.PlaneGeometry(200,6), matRoad);
+  roadH.rotation.x = -Math.PI/2; roadH.position.set(0,0.03,0); roadH.receiveShadow = true; g.add(roadH);
+  const roadV = new THREE.Mesh(new THREE.PlaneGeometry(6,200), matRoad);
+  roadV.rotation.x = -Math.PI/2; roadV.position.set(0,0.03,0); roadV.receiveShadow = true; g.add(roadV);
+
+  // Tile plaza
+  const matTile = new THREE.MeshLambertMaterial({color:0xB8B0A0});
+  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(20,20), matTile);
+  plaza.rotation.x = -Math.PI/2; plaza.position.set(30,0.02,30); plaza.receiveShadow = true; g.add(plaza);
+
+  // Compass labels
+  g.add(compassLabel('N 北', 0, -95));
+  g.add(compassLabel('S 南', 0, 95));
+  g.add(compassLabel('E 東', 95, 0, Math.PI/2));
+  g.add(compassLabel('W 西', -95, 0, Math.PI/2));
+
+  // Metric scale labels every 20m
+  for (let i = -80; i <= 80; i += 20) {
+    if (i === 0) continue;
+    const lbl = textLabel(Math.abs(i)+'m', 3, 0.8);
+    lbl.rotation.x = -Math.PI/2; lbl.position.set(i, 0.05, -3); g.add(lbl);
+    const lbl2 = textLabel(Math.abs(i)+'m', 3, 0.8);
+    lbl2.rotation.x = -Math.PI/2; lbl2.position.set(-3, 0.05, i); g.add(lbl2);
+  }
+}
+
+// ── Custom building management ──
+let customBuildings = [];
+let customBuildingMeshes = {};
+let selectedCustomId = null;
+let analysisGroup = null;
+let spacingLine = null;
+const customBuildingColors = [0xC8B8A0, 0xB0A890, 0xD0C0A0, 0xA8B8C0, 0xC0A880];
+
+function setCustomBuildings(buildings) {
+  // Remove old building groups
+  Object.keys(customBuildingMeshes).forEach(id => {
+    const grp = customBuildingMeshes[id];
+    if (grp) groupCustom.remove(grp);
+  });
+  customBuildingMeshes = {};
+
+  buildings.forEach((b, idx) => {
+    const bg = new THREE.Group();
+    const color = customBuildingColors[idx % customBuildingColors.length];
+    const matBody = new THREE.MeshLambertMaterial({color:color});
+    const matRoof = new THREE.MeshLambertMaterial({color:0x7A7870});
+    const matWin = new THREE.MeshLambertMaterial({color:0x4868A0, transparent:true, opacity:0.75});
+    const matAnno = new THREE.LineBasicMaterial({color:0xFF6644, transparent:true, opacity:0.8});
+
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), matBody);
+    body.position.set(0, b.h/2, 0);
+    body.castShadow = true; body.receiveShadow = true;
+    body.userData.buildingId = b.id;
+    bg.add(body);
+
+    // Roof
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(b.w+0.5, 0.3, b.d+0.5), matRoof);
+    roof.position.set(0, b.h+0.15, 0);
+    roof.castShadow = true;
+    bg.add(roof);
+
+    // Window bands
+    const floors = Math.max(1, Math.floor(b.h / 3));
+    for (let f = 1; f <= floors; f++) {
+      const wy = (f / (floors+1)) * b.h;
+      // Front and back
+      [b.d/2+0.02, -b.d/2-0.02].forEach(oz => {
+        const wm = new THREE.Mesh(new THREE.PlaneGeometry(b.w*0.72, 0.7), matWin);
+        wm.position.set(0, wy, oz);
+        if (oz < 0) wm.rotation.y = Math.PI;
+        bg.add(wm);
+      });
+      // Left and right
+      [b.w/2+0.02, -b.w/2-0.02].forEach(ox => {
+        const wm = new THREE.Mesh(new THREE.PlaneGeometry(b.d*0.72, 0.7), matWin);
+        wm.position.set(ox, wy, 0);
+        wm.rotation.y = ox > 0 ? Math.PI/2 : -Math.PI/2;
+        bg.add(wm);
+      });
+    }
+
+    // Height label
+    const hLbl = textLabel(b.h+'m', 3, 0.8);
+    hLbl.position.set(0, b.h + 1.5, 0);
+    bg.add(hLbl);
+
+    // Dimension annotation: vertical height line
+    const vPts = [new THREE.Vector3(b.w/2+1, 0, b.d/2+1), new THREE.Vector3(b.w/2+1, b.h, b.d/2+1)];
+    const vLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(vPts), matAnno);
+    bg.add(vLine);
+    const hAnnoLbl = textLabel(b.h+'m', 2.5, 0.6);
+    hAnnoLbl.position.set(b.w/2+2.5, b.h/2, b.d/2+1);
+    bg.add(hAnnoLbl);
+
+    // Dimension annotation: horizontal width line
+    const wPts = [new THREE.Vector3(-b.w/2, 0.1, b.d/2+1.5), new THREE.Vector3(b.w/2, 0.1, b.d/2+1.5)];
+    const wLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(wPts), matAnno);
+    bg.add(wLine);
+    const wAnnoLbl = textLabel(b.w+'m', 2.5, 0.6);
+    wAnnoLbl.rotation.x = -Math.PI/2;
+    wAnnoLbl.position.set(0, 0.15, b.d/2+3);
+    bg.add(wAnnoLbl);
+
+    bg.position.set(b.x, 0, b.z);
+    groupCustom.add(bg);
+    customBuildingMeshes[b.id] = bg;
+  });
+
+  updateBuildingUI();
+  updateSpacingInfo();
+}
+
+function selectCustomBuilding(id) {
+  // Reset previous
+  if (selectedCustomId !== null && customBuildingMeshes[selectedCustomId]) {
+    const prevGrp = customBuildingMeshes[selectedCustomId];
+    prevGrp.traverse(c => { if (c.isMesh && c.material && c.material.emissive) c.material.emissive.setHex(0x000000); });
+  }
+  selectedCustomId = id;
+  if (id !== null && customBuildingMeshes[id]) {
+    const grp = customBuildingMeshes[id];
+    grp.traverse(c => {
+      if (c.isMesh && c.userData.buildingId === id && c.material && c.material.emissive) {
+        c.material.emissive.setHex(0x224422);
+      }
+    });
+  }
+  updateBuildingUI();
+  updateSpacingInfo();
+}
+
+window.addCustomBuilding = function() {
+  const id = Date.now();
+  customBuildings.push({id:id, x:0, z:0, w:10, d:10, h:15});
+  setCustomBuildings(customBuildings);
+  selectCustomBuilding(id);
+};
+
+window.deleteCustomBuilding = function() {
+  if (selectedCustomId === null) return;
+  customBuildings = customBuildings.filter(b => b.id !== selectedCustomId);
+  selectedCustomId = null;
+  setCustomBuildings(customBuildings);
+};
+
+window.toggleBuildingTransparency = function() {
+  if (selectedCustomId === null) return;
+  const grp = customBuildingMeshes[selectedCustomId];
+  if (!grp) return;
+  grp.traverse(c => {
+    if (c.isMesh && c.material) {
+      c.material.transparent = true;
+      c.material.opacity = c.material.opacity < 0.9 ? 1.0 : 0.35;
+    }
+  });
+};
+
+function updateBuildingUI() {
+  const chipsDiv = document.getElementById('building-chips');
+  const editorDiv = document.getElementById('building-editor');
+  const editorTitle = document.getElementById('editor-title');
+  const editorSliders = document.getElementById('editor-sliders');
+  chipsDiv.innerHTML = '';
+  customBuildings.forEach((b, idx) => {
+    const chip = document.createElement('button');
+    chip.className = 'season-btn' + (b.id === selectedCustomId ? ' active' : '');
+    chip.style.cssText = 'padding:4px 10px;font-size:11px;flex:none;';
+    chip.textContent = '建築' + (idx+1);
+    chip.onclick = function() { selectCustomBuilding(b.id); };
+    chipsDiv.appendChild(chip);
+  });
+
+  if (selectedCustomId !== null) {
+    const b = customBuildings.find(b => b.id === selectedCustomId);
+    if (!b) { editorDiv.style.display='none'; return; }
+    const idx = customBuildings.indexOf(b);
+    editorDiv.style.display = 'block';
+    editorTitle.textContent = '建築' + (idx+1) + ' 編輯';
+    const sliders = [
+      {key:'x', label:'X', min:-80, max:80, unit:'m'},
+      {key:'z', label:'Z', min:-80, max:80, unit:'m'},
+      {key:'w', label:'寬W', min:2, max:50, unit:'m'},
+      {key:'d', label:'深D', min:2, max:50, unit:'m'},
+      {key:'h', label:'高H', min:3, max:80, unit:'m'}
+    ];
+    editorSliders.innerHTML = '';
+    sliders.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'slider-row';
+      row.style.marginTop = '4px';
+      row.innerHTML = '<span class="slider-label">' + s.label + '</span>' +
+        '<input type="range" min="'+s.min+'" max="'+s.max+'" step="1" value="'+b[s.key]+'" ' +
+        'oninput="onCustomSlider(\''+s.key+'\',this.value,this)">' +
+        '<span class="slider-val">' + b[s.key] + s.unit + '</span>';
+      editorSliders.appendChild(row);
+    });
+  } else {
+    editorDiv.style.display = 'none';
+  }
+}
+
+window.onCustomSlider = function(key, val, el) {
+  if (selectedCustomId === null) return;
+  const b = customBuildings.find(b => b.id === selectedCustomId);
+  if (!b) return;
+  b[key] = parseInt(val);
+  el.nextElementSibling.textContent = val + 'm';
+  setCustomBuildings(customBuildings);
+  selectCustomBuilding(selectedCustomId);
+};
+
+window.saveCustomBuildings = function() {
+  localStorage.setItem('shadowsim_custom_buildings', JSON.stringify(customBuildings));
+  alert('已儲存 ' + customBuildings.length + ' 棟建築');
+};
+
+window.loadCustomBuildings = function() {
+  const data = localStorage.getItem('shadowsim_custom_buildings');
+  if (!data) { alert('無儲存資料'); return; }
+  try {
+    customBuildings = JSON.parse(data);
+    selectedCustomId = null;
+    setCustomBuildings(customBuildings);
+    alert('已讀取 ' + customBuildings.length + ' 棟建築');
+  } catch(e) { alert('讀取失敗'); }
+};
+
+// ── Click-to-place on ground ──
+const raycaster = new THREE.Raycaster();
+const mouseDown = {x:0, y:0};
+canvas.addEventListener('mousedown', function(e) {
+  mouseDown.x = e.clientX; mouseDown.y = e.clientY;
+});
+canvas.addEventListener('mouseup', function(e) {
+  if (currentPreset !== 'custom') return;
+  const dx = e.clientX - mouseDown.x, dy = e.clientY - mouseDown.y;
+  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) return; // was a drag
+
+  const rect = canvas.getBoundingClientRect();
+  const mouse = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  raycaster.setFromCamera(mouse, camera);
+
+  // Check building bodies first
+  const bodyMeshes = [];
+  Object.values(customBuildingMeshes).forEach(grp => {
+    grp.traverse(c => { if (c.isMesh && c.userData.buildingId) bodyMeshes.push(c); });
+  });
+  const bHits = raycaster.intersectObjects(bodyMeshes);
+  if (bHits.length > 0) {
+    selectCustomBuilding(bHits[0].object.userData.buildingId);
+    return;
+  }
+
+  // Check ground
+  if (customGround) {
+    const gHits = raycaster.intersectObject(customGround);
+    if (gHits.length > 0) {
+      const pt = gHits[0].point;
+      const id = Date.now();
+      customBuildings.push({id:id, x:Math.round(pt.x), z:Math.round(pt.z), w:10, d:10, h:15});
+      setCustomBuildings(customBuildings);
+      selectCustomBuilding(id);
+    }
+  }
+});
+
+// ── Sunlight analysis heatmap ──
+function calcSunInline(hour, month, day, lat) {
+  const N = dayOfYear(month, day);
+  const dec = 23.45 * Math.sin(DEG * (360/365) * (284 + N));
+  const ha = (hour - 12) * 15;
+  const sinAlt = Math.sin(DEG*lat)*Math.sin(DEG*dec) + Math.cos(DEG*lat)*Math.cos(DEG*dec)*Math.cos(DEG*ha);
+  const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt))) / DEG;
+  const cosAlt = Math.cos(DEG * alt);
+  let az = 180;
+  if (cosAlt > 0.0001) {
+    const cosAzS = (Math.sin(DEG*dec) - Math.sin(DEG*lat)*sinAlt) / (Math.cos(DEG*lat)*cosAlt);
+    const azFS = Math.acos(Math.max(-1, Math.min(1, cosAzS))) / DEG;
+    az = ha > 0 ? 360 - azFS : azFS;
+    az = ((az % 360) + 360) % 360;
+  }
+  return {alt:alt, az:az};
+}
+
+window.runSunlightAnalysis = function() {
+  clearSunlightAnalysisInternal();
+  analysisGroup = new THREE.Group();
+  groupCustom.add(analysisGroup);
+
+  const gridSize = 16;
+  const cellSize = 160 / gridSize; // covers -80 to 80
+  const repDays = [[1,15],[3,20],[6,21],[9,23]]; // 4 representative days
+  const lat = currentCity.lat;
+
+  // Collect body meshes for raycasting
+  const bodyMeshes = [];
+  Object.values(customBuildingMeshes).forEach(grp => {
+    grp.traverse(c => { if (c.isMesh && c.userData.buildingId) bodyMeshes.push(c); });
+  });
+
+  const sunHours = new Float32Array(gridSize * gridSize);
+  let maxHours = 0;
+
+  for (let gi = 0; gi < gridSize; gi++) {
+    for (let gj = 0; gj < gridSize; gj++) {
+      const cx = -80 + (gi + 0.5) * cellSize;
+      const cz = -80 + (gj + 0.5) * cellSize;
+      let hours = 0;
+
+      repDays.forEach(([m, d]) => {
+        for (let h = 5; h <= 19; h += 0.5) {
+          const sun = calcSunInline(h, m, d, lat);
+          if (sun.alt <= 0) continue;
+          const sd2 = sunDir(sun.az * DEG, sun.alt * DEG);
+          const origin = new THREE.Vector3(cx, 0.5, cz);
+          const dir = new THREE.Vector3(sd2.x, sd2.y, sd2.z).normalize();
+          const rc = new THREE.Raycaster(origin, dir, 0, 300);
+          const hits = rc.intersectObjects(bodyMeshes);
+          if (hits.length === 0) hours += 0.5;
+        }
+      });
+
+      hours /= repDays.length; // average
+      sunHours[gi * gridSize + gj] = hours;
+      if (hours > maxHours) maxHours = hours;
+    }
+  }
+
+  // Create colored cells
+  for (let gi = 0; gi < gridSize; gi++) {
+    for (let gj = 0; gj < gridSize; gj++) {
+      const cx = -80 + (gi + 0.5) * cellSize;
+      const cz = -80 + (gj + 0.5) * cellSize;
+      const hours = sunHours[gi * gridSize + gj];
+      const t = maxHours > 0 ? hours / maxHours : 0;
+      // Blue (0,0,1) -> Red (1,0,0)
+      const color = new THREE.Color(t, 0, 1 - t);
+      const mat = new THREE.MeshBasicMaterial({color:color, transparent:true, opacity:0.45, depthWrite:false});
+      const cell = new THREE.Mesh(new THREE.PlaneGeometry(cellSize*0.9, cellSize*0.9), mat);
+      cell.rotation.x = -Math.PI/2; cell.position.set(cx, 0.06, cz);
+      analysisGroup.add(cell);
+
+      // Hour label
+      const lbl = textLabel(hours.toFixed(1)+'h', cellSize*0.7, cellSize*0.25);
+      lbl.rotation.x = -Math.PI/2; lbl.position.set(cx, 0.07, cz);
+      analysisGroup.add(lbl);
+    }
+  }
+
+  const resultDiv = document.getElementById('analysis-result');
+  resultDiv.style.display = 'block';
+  resultDiv.textContent = '日照分析完成：平均 ' + (Array.from(sunHours).reduce((a,b)=>a+b,0) / (gridSize*gridSize)).toFixed(1) + ' 小時/天（紅=多日照，藍=少日照）';
+};
+
+function clearSunlightAnalysisInternal() {
+  if (analysisGroup) {
+    groupCustom.remove(analysisGroup);
+    analysisGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
+    analysisGroup = null;
+  }
+  const resultDiv = document.getElementById('analysis-result');
+  if (resultDiv) { resultDiv.style.display = 'none'; resultDiv.textContent = ''; }
+}
+window.clearSunlightAnalysis = clearSunlightAnalysisInternal;
+
+// ── Spacing calculator ──
+function updateSpacingInfo() {
+  const infoDiv = document.getElementById('spacing-info');
+  // Remove old spacing line
+  if (spacingLine) { groupCustom.remove(spacingLine); spacingLine = null; }
+  if (selectedCustomId === null || currentPreset !== 'custom') {
+    if (infoDiv) infoDiv.style.display = 'none';
+    return;
+  }
+  const b = customBuildings.find(b => b.id === selectedCustomId);
+  if (!b) { infoDiv.style.display = 'none'; return; }
+
+  const lat = currentCity.lat;
+  // Winter solstice noon sun altitude
+  const winterSun = calcSunInline(12, 12, 21, lat);
+  const alt = winterSun.alt;
+  if (alt <= 0) {
+    infoDiv.style.display = 'block';
+    infoDiv.textContent = '冬至正午太陽高度角 ≤ 0°，無法計算間距';
+    return;
+  }
+  const minSpacing = b.h / Math.tan(alt * DEG);
+  infoDiv.style.display = 'block';
+  infoDiv.textContent = '冬至正午高度角: ' + alt.toFixed(1) + '° | 最小間距: ' + minSpacing.toFixed(1) + 'm（建築高' + b.h + 'm）';
+
+  // Draw spacing line in 3D (south of building)
+  spacingLine = new THREE.Group();
+  const lineMatB = new THREE.LineBasicMaterial({color:0x4488FF, transparent:true, opacity:0.8});
+  const pts = [
+    new THREE.Vector3(b.x, 0.2, b.z + b.d/2),
+    new THREE.Vector3(b.x, 0.2, b.z + b.d/2 + minSpacing)
+  ];
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMatB);
+  spacingLine.add(line);
+
+  // Translucent zone
+  const zoneGeo = new THREE.PlaneGeometry(b.w, minSpacing);
+  const zoneMat = new THREE.MeshBasicMaterial({color:0x4488FF, transparent:true, opacity:0.12, depthWrite:false, side:THREE.DoubleSide});
+  const zone = new THREE.Mesh(zoneGeo, zoneMat);
+  zone.rotation.x = -Math.PI/2;
+  zone.position.set(b.x, 0.1, b.z + b.d/2 + minSpacing/2);
+  spacingLine.add(zone);
+
+  // Label
+  const lbl = textLabel(minSpacing.toFixed(1)+'m', 4, 1);
+  lbl.rotation.x = -Math.PI/2;
+  lbl.position.set(b.x, 0.2, b.z + b.d/2 + minSpacing/2);
+  spacingLine.add(lbl);
+
+  groupCustom.add(spacingLine);
+}
+
+buildTaipei101(); buildNTUST(); buildIndoor(); buildCustom();
 
 // Sun path & shadow line
 let pathLine = null, shadowLine = null;
@@ -852,7 +1356,8 @@ function buildSunPath(month, lat) {
     let az=Math.acos(Math.max(-1,Math.min(1,cosAzS)))/DEG;
     if(ha>0) az=360-az; az=((az%360)+360)%360;
     const sd=sunDir(az*DEG,alt*DEG);
-    pts.push(new THREE.Vector3(sd.x*38,sd.y*38,sd.z*38));
+    const pathR=currentPreset==='ntust'?150:(currentPreset==='custom'?60:38);
+    pts.push(new THREE.Vector3(sd.x*pathR,sd.y*pathR,sd.z*pathR));
   }
   if(pts.length<2) return;
   pathLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
@@ -876,16 +1381,22 @@ const cDay=new THREE.Color(0x87CEEB),cDawn=new THREE.Color(0xFF7040),
 
 function applyScene(azDeg, altDeg, month, lat) {
   const isIndoor = currentPreset === 'indoor';
-  const sd=sunDir(azDeg*DEG,altDeg*DEG), dist=50;
+  const sd=sunDir(azDeg*DEG,altDeg*DEG), dist=currentPreset==='ntust'?150:(currentPreset==='custom'?120:80);
   // NTUST 場景以校園中心為基準（TR西、圖書館東、RB中東偏南）
   const tgt = currentPreset === 'ntust' ? new THREE.Vector3(0,0,2) : new THREE.Vector3(0,0,0);
   if(altDeg>0){
     sunLight.position.set(sd.x*dist+tgt.x, sd.y*dist, sd.z*dist+tgt.z);
     sunLight.target.position.copy(tgt); sunLight.target.updateMatrixWorld();
     sunLight.intensity=isIndoor?1.5+Math.sin(altDeg*DEG)*2.5:0.5+Math.sin(altDeg*DEG)*2.2;
+    if(!isIndoor){
+      var shadowSize=Math.max(60,Math.min(300,MAIN_H_REF/Math.max(0.05,Math.tan(altDeg*DEG))+30));
+      sunLight.shadow.camera.left=-shadowSize;sunLight.shadow.camera.right=shadowSize;
+      sunLight.shadow.camera.top=shadowSize;sunLight.shadow.camera.bottom=-shadowSize;
+      sunLight.shadow.camera.updateProjectionMatrix();
+    }
     sunLight.color.setHex(altDeg<20?0xFF9050:0xFFF5DC);
     sunMesh.visible=!isIndoor;
-    if(!isIndoor){sunMesh.position.set(sd.x*43,sd.y*43,sd.z*43);sunMesh.material.color.setHex(altDeg<15?0xFF7030:0xFFE055);}
+    if(!isIndoor){const sunR=currentPreset==='ntust'?120:(currentPreset==='custom'?80:43);sunMesh.position.set(sd.x*sunR,sd.y*sunR,sd.z*sunR);sunMesh.material.color.setHex(altDeg<15?0xFF7030:0xFFE055);}
   } else { sunLight.intensity=0; sunMesh.visible=false; }
   hemi.intensity=isIndoor?0.30:Math.max(0.05,0.08+Math.max(0,Math.sin(altDeg*DEG))*0.65);
   let sky;
@@ -893,8 +1404,10 @@ function applyScene(azDeg, altDeg, month, lat) {
   else if(altDeg<=0) sky=cNight.clone().lerp(cTwi,(altDeg+5)/5);
   else if(altDeg<=12) sky=cTwi.clone().lerp(cDawn,altDeg/6).lerp(cDay,altDeg/12);
   else sky=cDay.clone();
-  scene.background=sky;
-  scene.fog.density=isIndoor?0:0.007;
+  scene.background=null;
+  skyMat.uniforms.topColor.value.copy(sky);
+  skyMat.uniforms.bottomColor.value.copy(sky.clone().lerp(new THREE.Color(0xE8E0D0),0.5));
+  scene.fog.density=isIndoor?0:(currentPreset==='ntust'||currentPreset==='custom'?0.002:0.007);
   scene.fog.color.copy(sky.clone().lerp(new THREE.Color(0xC8DCF0),0.5));
   if(!isIndoor){
     buildSunPath(month,lat); updateShadowLine(azDeg,altDeg);
@@ -958,22 +1471,28 @@ window.setPreset = function(p) {
   group101.visible    = (p === 'taipei101');
   groupNTUST.visible  = (p === 'ntust');
   groupIndoor.visible = (p === 'indoor');
+  groupCustom.visible = (p === 'custom');
 
   if (p === 'ntust') {
-    MAIN_H_REF = 24; camRadius = 75; camTarget.set(0,10,0);
-    camTheta = DEG*40; camPhi = DEG*55;
-    sunLight.shadow.camera.left=-80;sunLight.shadow.camera.right=80;
-    sunLight.shadow.camera.top=80;sunLight.shadow.camera.bottom=-80;
+    MAIN_H_REF = 24; camRadius = 180; camTarget.set(-5,15,-36);
+    camTheta = DEG*220; camPhi = DEG*55;
+    sunLight.shadow.camera.left=-250;sunLight.shadow.camera.right=250;
+    sunLight.shadow.camera.top=250;sunLight.shadow.camera.bottom=-250;
   } else if (p === 'indoor') {
     MAIN_H_REF = 3; camRadius = 10; camTarget.set(0,1.5,-1);
     camTheta = DEG*20; camPhi = DEG*68;
     sunLight.shadow.camera.left=-10;sunLight.shadow.camera.right=10;
     sunLight.shadow.camera.top=10;sunLight.shadow.camera.bottom=-10;
+  } else if (p === 'custom') {
+    MAIN_H_REF = 20; camRadius = 80; camTarget.set(0,8,0);
+    camTheta = DEG*40; camPhi = DEG*55;
+    sunLight.shadow.camera.left=-80;sunLight.shadow.camera.right=80;
+    sunLight.shadow.camera.top=80;sunLight.shadow.camera.bottom=-80;
   } else {
     MAIN_H_REF = 38; camRadius = 65; camTarget.set(0,8,0);
     camTheta = DEG*40; camPhi = DEG*55;
-    sunLight.shadow.camera.left=-55;sunLight.shadow.camera.right=55;
-    sunLight.shadow.camera.top=55;sunLight.shadow.camera.bottom=-55;
+    sunLight.shadow.camera.left=-90;sunLight.shadow.camera.right=90;
+    sunLight.shadow.camera.top=90;sunLight.shadow.camera.bottom=-90;
   }
   sunLight.shadow.camera.updateProjectionMatrix();
   updateCamera();
@@ -981,6 +1500,7 @@ window.setPreset = function(p) {
   document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-' + p).classList.add('active');
   document.getElementById('orient-section').style.display = (p === 'indoor') ? 'block' : 'none';
+  document.getElementById('custom-section').style.display = (p === 'custom') ? 'block' : 'none';
   compute();
 };
 
@@ -1028,9 +1548,50 @@ window.onHourChange = function(v) {
   compute();
 };
 window.onMonthChange = function(v) {
-  currentMonth = parseInt(v); currentDay = 15;
+  currentMonth = parseInt(v);
+  const maxD = [0,31,28,31,30,31,30,31,31,30,31,30,31][currentMonth];
+  if (currentDay > maxD) currentDay = maxD;
+  document.getElementById('day-slider').max = maxD;
+  document.getElementById('day-slider').value = currentDay;
+  document.getElementById('day-val').textContent = currentDay + '日';
   document.getElementById('month-val').textContent = v + '月';
   compute();
+};
+window.onDayChange = function(v) {
+  currentDay = parseInt(v);
+  document.getElementById('day-val').textContent = v + '日';
+  compute();
+};
+
+// Auto-play
+let playInterval = null;
+window.togglePlay = function() {
+  const btn = document.getElementById('play-btn');
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+    btn.textContent = '▶';
+    btn.classList.remove('active');
+  } else {
+    btn.textContent = '⏸';
+    btn.classList.add('active');
+    playInterval = setInterval(() => {
+      currentHour += 0.25;
+      if (currentHour > 19) currentHour = 5;
+      document.getElementById('hour-slider').value = currentHour;
+      document.getElementById('hour-val').textContent = fmt(currentHour);
+      compute();
+    }, 150);
+  }
+};
+
+// Screenshot
+window.screenshot = function() {
+  renderer.render(scene, camera);
+  const link = document.createElement('a');
+  link.download = '光影建築_' + currentPreset + '_' + currentMonth + '月' + currentDay + '日_' + fmt(currentHour).replace(':','') + '.png';
+  link.href = renderer.domElement.toDataURL('image/png');
+  link.click();
 };
 
 // Panel toggle
