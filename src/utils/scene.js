@@ -546,27 +546,26 @@ export function generateSceneHTML() {
       const grid = new THREE.GridHelper(6, 6, 0xB8A888, 0xC8B898);
       grid.position.set(0, 0.02, -3); g.add(grid);
 
-      // 四面牆 + 天花板（完整封閉，陽光只從窗口進入）
-      addBox(g, 0, 3.05, -3, 8.0, 0.1, 6.0, matWall);   // 天花板
-      addBox(g, 0, 1.5, -6.05, 8.0, 3.0, 0.1, matWall); // 後牆
-      addBox(g, -4.05, 1.5, -3, 0.1, 3.0, 6.0, matWall); // 左牆
-      addBox(g,  4.05, 1.5, -3, 0.1, 3.0, 6.0, matWall); // 右牆
+      // 四面牆 + 天花板（加厚0.3避免shadow map漏光）
+      addBox(g, 0, 3.15, -3, 8.6, 0.3, 6.6, matWall);   // 天花板
+      addBox(g, 0, 1.5, -6.15, 8.6, 3.0, 0.3, matWall); // 後牆
+      addBox(g, -4.15, 1.5, -3, 0.3, 3.0, 6.6, matWall); // 左牆
+      addBox(g,  4.15, 1.5, -3, 0.3, 3.0, 6.6, matWall); // 右牆
 
       // 前牆（窗戶牆 z=0）— 窗口開口 x:-3~+3, y:0.9~2.7
-      addBox(g, -3.5, 1.5, 0.05, 1.0, 3.0, 0.1, matWall); // 左段
-      addBox(g,  3.5, 1.5, 0.05, 1.0, 3.0, 0.1, matWall); // 右段
-      addBox(g,  0,  0.45, 0.05, 6.0, 0.9, 0.1, matWall); // 窗台
-      addBox(g,  0,  2.85, 0.05, 6.0, 0.3, 0.1, matWall); // 窗頂樑
+      addBox(g, -3.5, 1.5, 0.15, 1.0, 3.0, 0.3, matWall); // 左段
+      addBox(g,  3.5, 1.5, 0.15, 1.0, 3.0, 0.3, matWall); // 右段
+      addBox(g,  0,  2.85, 0.15, 6.0, 0.3, 0.3, matWall); // 窗頂樑
 
-      // 玻璃
-      const glass = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 1.8), matGlass);
-      glass.position.set(0, 1.8, 0.06); g.add(glass);
+      // 落地窗玻璃（y:0~2.7）
+      const glass = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 2.7), matGlass);
+      glass.position.set(0, 1.35, 0.06); g.add(glass);
 
       // 窗框橘色線
-      const winGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(6.0, 1.8, 0.05));
+      const winGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(6.0, 2.7, 0.05));
       const winEdge = new THREE.LineSegments(winGeo,
         new THREE.LineBasicMaterial({ color: 0xFFAA44, transparent:true, opacity:0.9 }));
-      winEdge.position.set(0, 1.8, 0.06); g.add(winEdge);
+      winEdge.position.set(0, 1.35, 0.06); g.add(winEdge);
 
       // 人形比例參考（站在窗邊 1.7m高）
       addBox(g, 2.5, 0.85, -1.0, 0.35, 1.7, 0.35, matPerson);
@@ -937,22 +936,11 @@ export function generateSceneHTML() {
       const isIndoor = currentPreset === 'indoor';
       const sd=sunDir(azDeg*DEG,altDeg*DEG), dist=currentPreset==='ntust'?150:80;
       const tgt = currentPreset === 'ntust' ? new THREE.Vector3(0,0,2) : new THREE.Vector3(0,0,0);
-      // 室內：太陽方位與窗戶法線夾角，用smoothstep過渡避免亮度跳變
-      // 高度角>80°時太陽接近天頂，方位角不穩定，強制允許進光
-      var windowFactor = 1;
-      if (isIndoor && altDeg > 0 && altDeg <= 80) {
-        var winNormalAz = ORIENT_AZ[currentOrientation] !== undefined ? ORIENT_AZ[currentOrientation] : 180;
-        var diff = Math.abs(azDeg - winNormalAz);
-        if (diff > 180) diff = 360 - diff;
-        if (diff >= 95) windowFactor = 0;
-        else if (diff <= 80) windowFactor = 1;
-        else windowFactor = (95 - diff) / 15; // 80°~95° 平滑過渡
-      }
       if (altDeg>0) {
         sunLight.position.set(sd.x*dist+tgt.x,sd.y*dist,sd.z*dist+tgt.z);
         sunLight.target.position.copy(tgt); sunLight.target.updateMatrixWorld();
-        var baseIntensity = isIndoor ? 1.5+Math.sin(altDeg*DEG)*2.5 : 0.5+Math.sin(altDeg*DEG)*2.2;
-        sunLight.intensity = isIndoor ? baseIntensity * windowFactor : baseIntensity;
+        var baseIntensity = 0.5+Math.sin(altDeg*DEG)*2.2;
+        sunLight.intensity = baseIntensity;
         if (!isIndoor) {
           var shadowSize = Math.max(60, Math.min(300, MAIN_H_REF / Math.max(0.05, Math.tan(altDeg*DEG)) + 30));
           if (currentPreset === 'ntust') shadowSize = Math.max(shadowSize, 200);
@@ -968,7 +956,7 @@ export function generateSceneHTML() {
           sunMesh.material.color.setHex(altDeg<15 ? 0xFF7030 : 0xFFE055);
         }
       } else { sunLight.intensity=0; sunMesh.visible=false; }
-      hemi.intensity = isIndoor ? 0.50 : Math.max(0.05, 0.08+Math.max(0,Math.sin(altDeg*DEG))*0.65);
+      hemi.intensity = isIndoor ? 0.55 : Math.max(0.05, 0.08+Math.max(0,Math.sin(altDeg*DEG))*0.65);
       let sky;
       if      (altDeg<=-5)  sky=cNight.clone();
       else if (altDeg<=0)   sky=cNight.clone().lerp(cTwi,(altDeg+5)/5);
