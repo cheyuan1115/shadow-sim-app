@@ -1400,7 +1400,7 @@ function applyScene(azDeg, altDeg, month, lat) {
   var windowFactor = 1;
   if (isIndoor && altDeg > 0) {
     var ORIENT_AZ = { south: 180, east: 90, west: 270, north: 0 };
-    var winNormalAz = ORIENT_AZ[currentOrientation] || 180;
+    var winNormalAz = ORIENT_AZ[currentOrientation] !== undefined ? ORIENT_AZ[currentOrientation] : 180;
     var diff = Math.abs(azDeg - winNormalAz);
     if (diff > 180) diff = 360 - diff;
     windowFactor = diff >= 90 ? 0 : 1;
@@ -1472,7 +1472,7 @@ function updateHUD(s) {
   if (currentPreset === 'indoor') {
     document.getElementById('shadow-lbl').textContent = '光線進深';
     var oAzMap = { south: 180, east: 90, west: 270, north: 0 };
-    var wAz = oAzMap[currentOrientation] || 180;
+    var wAz = oAzMap[currentOrientation] !== undefined ? oAzMap[currentOrientation] : 180;
     var aDiff = Math.abs(s.az - wAz); if (aDiff > 180) aDiff = 360 - aDiff;
     if (s.alt > 0.5 && aDiff < 90) {
       const depth = 2.7 / Math.tan(s.alt * DEG);

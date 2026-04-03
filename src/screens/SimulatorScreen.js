@@ -105,7 +105,7 @@ export default function SimulatorScreen() {
   // 室內：遮陽板高度(2.7m) / tan(altitude) = 光線進深
   // 需檢查太陽方位角與窗戶法線夾角 < 90° 才有直射光
   const orientAzMap = { south: 180, east: 90, west: 270, north: 0 };
-  const winNormalAz = orientAzMap[orientation] || 180;
+  const winNormalAz = orientAzMap[orientation] !== undefined ? orientAzMap[orientation] : 180;
   const azDiff = Math.abs(sun.azimuth - winNormalAz) > 180
     ? 360 - Math.abs(sun.azimuth - winNormalAz)
     : Math.abs(sun.azimuth - winNormalAz);

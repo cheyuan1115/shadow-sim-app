@@ -940,7 +940,7 @@ export function generateSceneHTML() {
       // 室內：太陽方位是否在窗戶可視範圍內（夾角<90°即可照入）
       var windowFactor = 1;
       if (isIndoor && altDeg > 0) {
-        var winNormalAz = ORIENT_AZ[currentOrientation] || 180;
+        var winNormalAz = ORIENT_AZ[currentOrientation] !== undefined ? ORIENT_AZ[currentOrientation] : 180;
         var diff = Math.abs(azDeg - winNormalAz);
         if (diff > 180) diff = 360 - diff;
         windowFactor = diff >= 90 ? 0 : 1;
